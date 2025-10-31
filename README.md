@@ -25,6 +25,12 @@ uv pip install numpy
 
 uv run streamlit run dashboard.py
 
+uv pip install mplfinance
+
+
+
+
+
 
 
 
