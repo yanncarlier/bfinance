@@ -19,7 +19,7 @@ import ccxt
 # Data manipulation and analysis (DataFrame handling)
 import pandas as pd
 # Matplotlib-based finance plotting (candles, volume, indicators)
-import mplfinance as mpf
+# import mplfinance as mpf
 # For handling timestamps and UTC time
 from datetime import datetime, timedelta, timezone
 # ===================================================================
@@ -68,6 +68,7 @@ raw_data = exchange.fetch_ohlcv(symbol, timeframe, limit=7)
 if not raw_data:
     raise ValueError(
         f"No data returned for {symbol}. Check symbol and network connection.")
+# print(raw_data)
 # ===================================================================
 # 6. CONVERT TO PANDAS DATAFRAME
 # ===================================================================
