@@ -1,5 +1,5 @@
 """
-dashboard.py
+trading_bot_dashboard.py
 ============
 A live Streamlit dashboard for monitoring and controlling a BTC/USDT trading bot.
 Features:

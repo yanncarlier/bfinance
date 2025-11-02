@@ -1,6 +1,7 @@
 
 
-
+ALL You Need To KNOW About Moving Averages:  
+https://www.youtube.com/watch?v=2mXduyOuzgU  
 
 uv init  
 uv run  main.py  

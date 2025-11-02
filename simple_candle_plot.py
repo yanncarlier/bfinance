@@ -1,7 +1,7 @@
 """
 BTC/USDT Daily Candlestick Chart Generator
 -----------------------------------------
-Fetches the last 90 days of BTC/USDT daily OHLCV data from Binance
+Fetches the last n days of BTC/USDT daily OHLCV data from Binance
 using ccxt, converts it to a pandas DataFrame, prints a sample,
 and saves a clean, professional candlestick chart as a PNG file.
 Features:
@@ -60,7 +60,7 @@ print(
 # 5. FETCH OHLCV DATA
 # ===================================================================
 # fetch_ohlcv() returns list of [timestamp, open, high, low, close, volume]
-# limit=90: Fetch only the last 90 days (clean, readable chart)
+# limit=n: Fetch only the last n days (clean, readable chart)
 # Note: Binance allows max 1000 candles per request
 # raw_data = exchange.fetch_ohlcv(symbol, timeframe, limit=90)
 raw_data = exchange.fetch_ohlcv(symbol, timeframe, limit=7)
@@ -108,12 +108,12 @@ print(df.head())
 # - title: Dynamic title with symbol and timeframe
 # - volume=True: Include volume bars below price
 # - savefig: Save chart to PNG file (works in headless/terminal/SSH)
-# - warn_too_much_data=1000: Suppress "too much data" warning (we only have 90 points)
+# - warn_too_much_data=1000: Suppress "too much data" warning (we only have n points)
 # mpf.plot(
 #     df,
 #     type='candle',                    # Candlestick style
 #     style='charles',                  # Professional blue/red color theme
-#     title=f'{symbol} {timeframe} (Last 90 Days)',
+#     title=f'{symbol} {timeframe} (Last n Days)',
 #     volume=True,                      # Show trading volume panel
 #     # Output filename (saved in current directory)
 #     savefig='btc_usdt_chart.png',

@@ -1,5 +1,5 @@
 """
-btc_price_tracker.py
+yahoo_price_tracker.py
 ====================
 A simple, robust script to fetch and display the latest Bitcoin (BTC-USD) closing price
 using Yahoo Finance via the `yfinance` library.
