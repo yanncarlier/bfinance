@@ -32,9 +32,14 @@ uv pip install mplfinance
 
 
 
-
+uv pip install -r requirements.txt --reinstall
 
 
 
 code .
 shift ctrl p
+
+https://www.binance.com/en/my/wallet/account/main/deposit/crypto/BTC  
+
+
+
