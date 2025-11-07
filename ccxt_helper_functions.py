@@ -13,6 +13,7 @@ exchange = ccxt.binance({
     'apiKey': API_KEY,
     'secret': API_SECRET,
     'enableRateLimit': True,
+    'options': {'defaultType': 'spot'}
 })
 SYMBOL = 'BTC/USDT'
 # === HELPER FUNCTIONS ===

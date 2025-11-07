@@ -32,7 +32,7 @@ TIMEFRAME = '1h'              # Candlestick interval: '1m', '5m', '1h', '4h', '1
 SHORT_WINDOW = 10             # Fast moving average period (e.g., 10-hour MA)
 LONG_WINDOW = 50              # Slow moving average period (e.g., 50-hour MA)
 POSITION_SIZE_PCT = 0.02      # Risk 2% of available USDT per trade
-MAX_TRADE_USD = 100.0         # Hard cap: never risk more than $100 equivalent
+MAX_TRADE_USD = 1000.0         # Hard cap: never risk more than $100 equivalent
 STOP_LOSS_PCT = 0.05          # Trail stop-loss at 5% below peak price
 SCHEDULE_MINUTES = 5          # How often to check signals (in minutes)
 # Trading pair and asset symbols

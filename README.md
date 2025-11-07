@@ -43,3 +43,15 @@ https://www.binance.com/en/my/wallet/account/main/deposit/crypto/BTC
 
 
 
+Initialize a new virtual environment with uv
+
+uv venv
+
+source .venv/bin/activate
+
+
+
+
+
+
+

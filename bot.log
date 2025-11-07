@@ -72,3 +72,89 @@ Bot stopped by user (Ctrl+C). Goodbye!
 
 2025-11-06 15:54:46,379 | INFO     | 
 Bot stopped by user (Ctrl+C). Goodbye!
+2025-11-06 16:03:53,022 | INFO     | PAPER TRADING MODE ENABLED - NO REAL ORDERS WILL BE PLACED
+2025-11-06 16:03:53,023 | INFO     | STARTING MOVING AVERAGE CROSSOVER BOT
+2025-11-06 16:03:53,023 | INFO     | Strategy: 10/50 MA on 1h
+2025-11-06 16:03:53,023 | INFO     | Risk: 2.0% per trade, max $100.0
+2025-11-06 16:03:53,023 | INFO     | Stop-Loss: 5.0% trailing
+2025-11-06 16:03:53,023 | INFO     | Cycle: Every 5 minutes
+2025-11-06 16:03:53,023 | INFO     | Bot is now LIVE. Press Ctrl+C to stop.
+
+2025-11-06 16:03:53,023 | INFO     | --- CYCLE 1 @ 2025-11-06 16:03:53 ---
+2025-11-06 16:03:53,023 | INFO     | ============================================================
+2025-11-06 16:03:53,023 | INFO     | RUNNING STRATEGY CYCLE
+2025-11-06 16:03:55,815 | INFO     | Price: 102,908.80 | MA10: 103,378.89 | MA50: 102,778.28
+2025-11-06 16:03:55,816 | INFO     | Cycle 1 complete in 2.8s | Sleeping 297s
+
+2025-11-06 16:04:07,459 | INFO     | 
+Bot stopped by user (Ctrl+C). Goodbye!
+2025-11-06 16:07:09,003 | INFO     | PAPER TRADING MODE ENABLED - NO REAL ORDERS WILL BE PLACED
+2025-11-06 16:07:09,003 | INFO     | STARTING MOVING AVERAGE CROSSOVER BOT
+2025-11-06 16:07:09,003 | INFO     | Strategy: 10/50 MA on 1h
+2025-11-06 16:07:09,003 | INFO     | Risk: 2.0% per trade, max $100.0
+2025-11-06 16:07:09,003 | INFO     | Stop-Loss: 5.0% trailing
+2025-11-06 16:07:09,003 | INFO     | Cycle: Every 5 minutes
+2025-11-06 16:07:09,003 | INFO     | Bot is now LIVE. Press Ctrl+C to stop.
+
+2025-11-06 16:07:09,003 | INFO     | --- CYCLE 1 @ 2025-11-06 16:07:09 ---
+2025-11-06 16:07:09,003 | INFO     | ============================================================
+2025-11-06 16:07:09,003 | INFO     | RUNNING STRATEGY CYCLE
+2025-11-06 16:07:11,827 | INFO     | Price: 102,964.61 | MA10: 103,384.47 | MA50: 102,779.40
+2025-11-06 16:07:11,827 | INFO     | Cycle 1 complete in 2.8s | Sleeping 297s
+
+2025-11-06 16:07:13,789 | INFO     | 
+Bot stopped by user (Ctrl+C). Goodbye!
+2025-11-06 16:10:24,507 | INFO     | PAPER TRADING MODE ENABLED - NO REAL ORDERS WILL BE PLACED
+2025-11-06 16:10:24,507 | INFO     | STARTING MOVING AVERAGE CROSSOVER BOT
+2025-11-06 16:10:24,507 | INFO     | Strategy: 10/50 MA on 1h
+2025-11-06 16:10:24,507 | INFO     | Risk: 2.0% per trade, max $100.0
+2025-11-06 16:10:24,508 | INFO     | Stop-Loss: 5.0% trailing
+2025-11-06 16:10:24,508 | INFO     | Cycle: Every 5 minutes
+2025-11-06 16:10:24,508 | INFO     | Bot is now LIVE. Press Ctrl+C to stop.
+
+2025-11-06 16:10:24,508 | INFO     | --- CYCLE 1 @ 2025-11-06 16:10:24 ---
+2025-11-06 16:10:24,508 | INFO     | ============================================================
+2025-11-06 16:10:24,508 | INFO     | RUNNING STRATEGY CYCLE
+2025-11-06 16:10:27,238 | INFO     | Price: 102,970.23 | MA10: 103,385.03 | MA50: 102,779.51
+2025-11-06 16:10:27,238 | INFO     | Cycle 1 complete in 2.7s | Sleeping 297s
+
+2025-11-06 16:15:24,508 | INFO     | --- CYCLE 2 @ 2025-11-06 16:15:24 ---
+2025-11-06 16:15:24,508 | INFO     | ============================================================
+2025-11-06 16:15:24,508 | INFO     | RUNNING STRATEGY CYCLE
+2025-11-06 16:15:24,775 | INFO     | Price: 103,112.30 | MA10: 103,399.24 | MA50: 102,782.35
+2025-11-06 16:15:24,775 | INFO     | Cycle 2 complete in 0.3s | Sleeping 300s
+
+2025-11-06 16:20:24,508 | INFO     | --- CYCLE 3 @ 2025-11-06 16:20:24 ---
+2025-11-06 16:20:24,509 | INFO     | ============================================================
+2025-11-06 16:20:24,509 | INFO     | RUNNING STRATEGY CYCLE
+2025-11-06 16:20:24,741 | INFO     | Price: 103,028.37 | MA10: 103,390.84 | MA50: 102,780.68
+2025-11-06 16:20:24,741 | INFO     | Cycle 3 complete in 0.2s | Sleeping 300s
+
+2025-11-06 16:25:24,509 | INFO     | --- CYCLE 4 @ 2025-11-06 16:25:24 ---
+2025-11-06 16:25:24,509 | INFO     | ============================================================
+2025-11-06 16:25:24,509 | INFO     | RUNNING STRATEGY CYCLE
+2025-11-06 16:25:24,830 | INFO     | Price: 103,029.38 | MA10: 103,390.94 | MA50: 102,780.70
+2025-11-06 16:25:24,830 | INFO     | Cycle 4 complete in 0.3s | Sleeping 300s
+
+2025-11-06 16:30:24,509 | INFO     | --- CYCLE 5 @ 2025-11-06 16:30:24 ---
+2025-11-06 16:30:24,509 | INFO     | ============================================================
+2025-11-06 16:30:24,515 | INFO     | RUNNING STRATEGY CYCLE
+2025-11-06 16:30:24,836 | INFO     | Price: 102,963.48 | MA10: 103,384.35 | MA50: 102,779.38
+2025-11-06 16:30:24,836 | INFO     | Cycle 5 complete in 0.3s | Sleeping 300s
+
+2025-11-06 16:33:06,920 | INFO     | PAPER TRADING MODE ENABLED - NO REAL ORDERS WILL BE PLACED
+2025-11-06 16:33:06,921 | INFO     | STARTING MOVING AVERAGE CROSSOVER BOT
+2025-11-06 16:33:06,921 | INFO     | Strategy: 10/50 MA on 1h
+2025-11-06 16:33:06,921 | INFO     | Risk: 2.0% per trade, max $100.0
+2025-11-06 16:33:06,921 | INFO     | Stop-Loss: 5.0% trailing
+2025-11-06 16:33:06,921 | INFO     | Cycle: Every 5 minutes
+2025-11-06 16:33:06,921 | INFO     | Bot is now LIVE. Press Ctrl+C to stop.
+
+2025-11-06 16:33:06,921 | INFO     | --- CYCLE 1 @ 2025-11-06 16:33:06 ---
+2025-11-06 16:33:06,921 | INFO     | ============================================================
+2025-11-06 16:33:06,921 | INFO     | RUNNING STRATEGY CYCLE
+2025-11-06 16:33:09,810 | INFO     | Price: 102,987.92 | MA10: 103,386.80 | MA50: 102,779.87
+2025-11-06 16:33:09,810 | INFO     | Cycle 1 complete in 2.9s | Sleeping 297s
+
+2025-11-06 16:37:39,425 | INFO     | 
+Bot stopped by user (Ctrl+C). Goodbye!
