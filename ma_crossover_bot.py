@@ -74,6 +74,19 @@ position = {
     'amount': 0.0,
     'highest_price': 0.0
 }
+def get_real_balances():
+    """
+    Fetch real USDT and BTC balances from Binance (always real, regardless of paper mode).
+    """
+    try:
+        bal = exchange.fetch_balance()
+        return {
+            'usdt': bal['total'].get(LIVE_CONFIG['quote_currency'], 0.0),
+            'btc': bal['total'].get(LIVE_CONFIG['base_currency'], 0.0)
+        }
+    except Exception as e:
+        logger.error(f"Real balance fetch error: {e}")
+        return {'usdt': 0.0, 'btc': 0.0}
 def fetch_ohlcv(symbol, timeframe, limit, retries=3):
     limit = int(limit)  # FIX: Ensure int for API
     for attempt in range(retries):
@@ -93,7 +106,7 @@ def fetch_ohlcv(symbol, timeframe, limit, retries=3):
                 return None
 def get_balance():
     """
-    Get USDT balance from exchange or simulation.
+    Get USDT balance for trading decisions (simulated in paper mode, real otherwise).
     """
     if LIVE_CONFIG['paper_trading']:
         return simulated_balance['usdt']
@@ -254,6 +267,10 @@ def main():
     except Exception as e:
         logger.error(f"Backtest failed: {e}. Using LIVE_CONFIG defaults")
         bt = pd.DataFrame()
+    # Log initial real balances
+    real_bal = get_real_balances()
+    logger.info(
+        f"Initial Real Balances - {LIVE_CONFIG['quote_currency']}: {real_bal['usdt']:,.2f} | {LIVE_CONFIG['base_currency']}: {real_bal['btc']:.6f}")
     logger.info("Bot LIVE. Ctrl+C to stop.\n")
     cycle = 0
     while True:
@@ -263,9 +280,10 @@ def main():
                 f"--- CYCLE {cycle} @ {datetime.now().strftime('%H:%M:%S')} ---")
             start = time.time()
             run_strategy()
-            usdt_balance = get_balance()
+            usdt_balance = get_balance()  # Trading USDT (sim or real)
+            real_bal = get_real_balances()  # Always real for display
             logger.info(
-                f"{LIVE_CONFIG['quote_currency']} Balance: {usdt_balance:,.2f}")
+                f"{LIVE_CONFIG['quote_currency']} Balance: {usdt_balance:,.2f} | Real {LIVE_CONFIG['base_currency']} Balance: {real_bal['btc']:.6f}")
             elapsed = time.time() - start
             sleep = max(0, LIVE_CONFIG['schedule_minutes'] * 60 - elapsed)
             logger.info(f"Cycle done in {elapsed:.1f}s | Sleep {sleep:.0f}s")
