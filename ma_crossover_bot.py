@@ -35,10 +35,8 @@ LIVE_CONFIG = {
 # BACKTEST CONFIGURATION (Backtest Variables)
 # =============================================================================
 BACKTEST_CONFIG = {
-    'data_limit': 100000,  # Candlesticks to retrieve for backtesting
-    # Number of top combinations to print (used only for display)
+    'data_limit': 1000,  # UPGRADE: ~3.5 days for more signals
     'top_combos_to_display': 10,
-    # Note: Other keys like 'symbol', 'candle_timeframe' are shared via defaults in backtest.py
 }
 # =============================================================================
 # SHARED/CORE SETUP (Not specific to backtest or live)
@@ -58,13 +56,16 @@ exchange = ccxt.binance({
     'apiKey': API_KEY,
     'secret': API_SECRET,
     'enableRateLimit': True,
-    'options': {'defaultType': 'spot'}
+    'options': {'defaultType': 'spot'},
+    # 'verbose': True  # Logs raw requests
 })
 # Log trading mode (paper or real)
 if LIVE_CONFIG['paper_trading']:
     logger.info("PAPER TRADING MODE - NO REAL ORDERS")
 else:
     logger.warning("REAL TRADING MODE - ORDERS WILL EXECUTE!")
+# FIX: Simulated balance for paper trading (starts at init_usdt, updated on trades)
+simulated_balance = {'usdt': LIVE_CONFIG['init_usdt']}
 # Global position state dictionary
 position = {
     'in_position': False,
@@ -72,32 +73,47 @@ position = {
     'amount': 0.0,
     'highest_price': 0.0
 }
-def fetch_ohlcv(symbol, timeframe, limit):
-    """
-    Fetch OHLCV data from exchange.
-    Uses explicit params; call with BACKTEST_CONFIG['data_limit'] for backtests,
-    or a small limit (e.g., LIVE_CONFIG['long_window'] + 10) for live trading.
-    """
-    try:
-        raw = exchange.fetch_ohlcv(symbol, timeframe, limit)
-        df = pd.DataFrame(
-            raw, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        df.set_index('timestamp', inplace=True)
-        return df
-    except Exception as e:
-        logger.error(f"OHLCV fetch failed: {e}")
-        return None
+def fetch_ohlcv(symbol, timeframe, limit, retries=3):
+    limit = int(limit)  # FIX: Ensure int for API
+    for attempt in range(retries):
+        try:
+            raw = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+            df = pd.DataFrame(
+                raw, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+            df.set_index('timestamp', inplace=True)
+            logger.info(f"Fetched {len(df)} candles successfully")
+            return df
+        except Exception as e:
+            logger.error(f"OHLCV fetch attempt {attempt+1} failed: {e}")
+            if attempt < retries - 1:
+                time.sleep(2 ** attempt)  # Exponential backoff
+            else:
+                return None
 def get_balance():
     """
-    Get USDT balance from exchange.
+    Get USDT balance from exchange or simulation.
     """
+    if LIVE_CONFIG['paper_trading']:
+        return simulated_balance['usdt']
     try:
         bal = exchange.fetch_balance()
         return bal['total'].get(LIVE_CONFIG['quote_currency'], 0.0)
     except Exception as e:
         logger.error(f"Balance error: {e}")
         return 0.0
+# FIX: New helper for paper trades
+def update_simulated_balance(side, amount, price):
+    """
+    Update simulated USDT balance on paper trades.
+    """
+    global simulated_balance
+    usd_value = amount * price
+    if side == 'buy':
+        simulated_balance['usdt'] -= usd_value
+    elif side == 'sell':
+        simulated_balance['usdt'] += usd_value
+    logger.info(f"[SIM] Balance updated: USDT={simulated_balance['usdt']:.2f}")
 def calculate_position_size(usdt_balance, price):
     """
     Calculate BTC amount based on risk rules.
@@ -113,6 +129,7 @@ def place_market_order(side, amount):
     if LIVE_CONFIG['paper_trading']:
         logger.info(
             f"[PAPER] {side.upper()} {amount:.6f} {LIVE_CONFIG['base_currency']} @ market")
+        # FIX: Update sim balance here (price fetched earlier in caller)
         return {'id': f"paper_{int(time.time())}", 'status': 'closed'}
     try:
         order = exchange.create_order(
@@ -141,6 +158,8 @@ def check_trailing_stop(price):
             pnl = (price - position['entry_price']) * position['amount']
             logger.info(
                 f"Closed on stop | P/L: {pnl:+.2f} {LIVE_CONFIG['quote_currency']}")
+            if LIVE_CONFIG['paper_trading']:
+                update_simulated_balance('sell', position['amount'], price)
             position.update(
                 {'in_position': False, 'entry_price': 0, 'amount': 0, 'highest_price': 0})
         return True
@@ -156,6 +175,8 @@ def run_strategy():
     df = fetch_ohlcv(LIVE_CONFIG['symbol'],
                      LIVE_CONFIG['candle_timeframe'], limit)
     if df is None or len(df) < LIVE_CONFIG['long_window']:
+        logger.warning(
+            f"Insufficient data: {len(df) if df is not None else 0} candles")
         return
     current_ts = df.index[-1].timestamp()
     if current_ts == last_candle_ts:
@@ -184,6 +205,8 @@ def run_strategy():
             return
         order = place_market_order('buy', amount)
         if order:
+            if LIVE_CONFIG['paper_trading']:
+                update_simulated_balance('buy', amount, price)
             position.update({
                 'in_position': True,
                 'entry_price': price,
@@ -198,6 +221,8 @@ def run_strategy():
             pnl = (price - position['entry_price']) * position['amount']
             logger.info(
                 f"Death Cross exit | P/L: {pnl:+.2f} {LIVE_CONFIG['quote_currency']}")
+            if LIVE_CONFIG['paper_trading']:
+                update_simulated_balance('sell', position['amount'], price)
             position.update(
                 {'in_position': False, 'entry_price': 0, 'amount': 0, 'highest_price': 0})
 def main():
@@ -212,9 +237,10 @@ def main():
         # Unpack config as kwargs to match run_hf_backtest signature
         bt = backtest.run_hf_backtest(limit=BACKTEST_CONFIG['data_limit'])
         if not bt.empty:
-            # Override with top backtest result
-            LIVE_CONFIG['short_window'] = bt.iloc[0]['short']
-            LIVE_CONFIG['long_window'] = bt.iloc[0]['long']
+            LIVE_CONFIG['short_window'] = int(
+                bt.iloc[0]['short'])  # FIX: Cast to int
+            LIVE_CONFIG['long_window'] = int(
+                bt.iloc[0]['long'])   # FIX: Cast to int
             logger.info(
                 f"Backtest override: Using MA {LIVE_CONFIG['short_window']}/{LIVE_CONFIG['long_window']} ({bt.iloc[0]['return_%']}%)")
             print(bt.head(BACKTEST_CONFIG['top_combos_to_display']).to_string(
