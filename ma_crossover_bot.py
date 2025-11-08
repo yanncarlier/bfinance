@@ -28,7 +28,7 @@ LIVE_CONFIG = {
     'symbol': 'BTC/USDT',
     'base_currency': 'BTC',
     'quote_currency': 'USDT',
-    'init_usdt': 10000.0,
+    # REMOVED: 'init_usdt': 10000.0,  # No longer needed without simulation
     # FIX: Load from .env, default True
     'paper_trading': os.getenv('PAPER_TRADING', 'True').lower() == 'true',
 }
@@ -65,8 +65,7 @@ if LIVE_CONFIG['paper_trading']:
     logger.info("PAPER TRADING MODE - NO REAL ORDERS")
 else:
     logger.warning("REAL TRADING MODE - ORDERS WILL EXECUTE!")
-# FIX: Simulated balance for paper trading (starts at init_usdt, updated on trades)
-simulated_balance = {'usdt': LIVE_CONFIG['init_usdt']}
+# REMOVED: Simulated balance (now always using real balances for decisions)
 # Global position state dictionary
 position = {
     'in_position': False,
@@ -76,7 +75,7 @@ position = {
 }
 def get_real_balances():
     """
-    Fetch real USDT and BTC balances from Binance (always real, regardless of paper mode).
+    Fetch real USDT and BTC balances from Binance (always real).
     """
     try:
         bal = exchange.fetch_balance()
@@ -106,28 +105,15 @@ def fetch_ohlcv(symbol, timeframe, limit, retries=3):
                 return None
 def get_balance():
     """
-    Get USDT balance for trading decisions (simulated in paper mode, real otherwise).
+    Get USDT balance from exchange (always real, for trading decisions).
     """
-    if LIVE_CONFIG['paper_trading']:
-        return simulated_balance['usdt']
     try:
         bal = exchange.fetch_balance()
         return bal['total'].get(LIVE_CONFIG['quote_currency'], 0.0)
     except Exception as e:
         logger.error(f"Balance error: {e}")
         return 0.0
-# FIX: New helper for paper trades
-def update_simulated_balance(side, amount, price):
-    """
-    Update simulated USDT balance on paper trades.
-    """
-    global simulated_balance
-    usd_value = amount * price
-    if side == 'buy':
-        simulated_balance['usdt'] -= usd_value
-    elif side == 'sell':
-        simulated_balance['usdt'] += usd_value
-    logger.info(f"[SIM] Balance updated: USDT={simulated_balance['usdt']:.2f}")
+# REMOVED: update_simulated_balance (no simulation)
 def calculate_position_size(usdt_balance, price):
     """
     Calculate BTC amount based on risk rules.
@@ -143,7 +129,6 @@ def place_market_order(side, amount):
     if LIVE_CONFIG['paper_trading']:
         logger.info(
             f"[PAPER] {side.upper()} {amount:.6f} {LIVE_CONFIG['base_currency']} @ market")
-        # FIX: Update sim balance here (price fetched earlier in caller)
         return {'id': f"paper_{int(time.time())}", 'status': 'closed'}
     try:
         order = exchange.create_order(
@@ -172,8 +157,7 @@ def check_trailing_stop(price):
             pnl = (price - position['entry_price']) * position['amount']
             logger.info(
                 f"Closed on stop | P/L: {pnl:+.2f} {LIVE_CONFIG['quote_currency']}")
-            if LIVE_CONFIG['paper_trading']:
-                update_simulated_balance('sell', position['amount'], price)
+            # REMOVED: Simulated update (always real)
             position.update(
                 {'in_position': False, 'entry_price': 0, 'amount': 0, 'highest_price': 0})
         return True
@@ -219,8 +203,7 @@ def run_strategy():
             return
         order = place_market_order('buy', amount)
         if order:
-            if LIVE_CONFIG['paper_trading']:
-                update_simulated_balance('buy', amount, price)
+            # REMOVED: Simulated update (always real)
             position.update({
                 'in_position': True,
                 'entry_price': price,
@@ -235,8 +218,7 @@ def run_strategy():
             pnl = (price - position['entry_price']) * position['amount']
             logger.info(
                 f"Death Cross exit | P/L: {pnl:+.2f} {LIVE_CONFIG['quote_currency']}")
-            if LIVE_CONFIG['paper_trading']:
-                update_simulated_balance('sell', position['amount'], price)
+            # REMOVED: Simulated update (always real)
             position.update(
                 {'in_position': False, 'entry_price': 0, 'amount': 0, 'highest_price': 0})
 def main():
@@ -280,7 +262,7 @@ def main():
                 f"--- CYCLE {cycle} @ {datetime.now().strftime('%H:%M:%S')} ---")
             start = time.time()
             run_strategy()
-            usdt_balance = get_balance()  # Trading USDT (sim or real)
+            usdt_balance = get_balance()  # Always real USDT
             real_bal = get_real_balances()  # Always real for display
             logger.info(
                 f"{LIVE_CONFIG['quote_currency']} Balance: {usdt_balance:,.2f} | Real {LIVE_CONFIG['base_currency']} Balance: {real_bal['btc']:.6f}")
