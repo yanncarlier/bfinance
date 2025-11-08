@@ -29,7 +29,8 @@ LIVE_CONFIG = {
     'base_currency': 'BTC',
     'quote_currency': 'USDT',
     'init_usdt': 10000.0,
-    'paper_trading': True,
+    # FIX: Load from .env, default True
+    'paper_trading': os.getenv('PAPER_TRADING', 'True').lower() == 'true',
 }
 # =============================================================================
 # BACKTEST CONFIGURATION (Backtest Variables)
