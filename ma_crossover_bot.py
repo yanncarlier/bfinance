@@ -28,8 +28,7 @@ LIVE_CONFIG = {
     'symbol': 'BTC/USDT',
     'base_currency': 'BTC',
     'quote_currency': 'USDT',
-    # REMOVED: 'init_usdt': 10000.0,  # No longer needed without simulation
-    # FIX: Load from .env, default True
+    'taker_fee_pct': 0.001,  # 0.1% default; adjust for your tier
     'paper_trading': os.getenv('PAPER_TRADING', 'True').lower() == 'true',
 }
 # =============================================================================
@@ -71,7 +70,8 @@ position = {
     'in_position': False,
     'entry_price': 0.0,
     'amount': 0.0,
-    'highest_price': 0.0
+    'highest_price': 0.0,
+    'entry_fee_usd': 0.0  # NEW: Track entry fee for accurate P/L
 }
 def get_real_balances():
     """
@@ -139,6 +139,17 @@ def place_market_order(side, amount):
     except Exception as e:
         logger.error(f"Order failed: {e}")
         return None
+def calculate_fees(side, amount, price):
+    """
+    NEW: Calculate approximate taker fees in USD.
+    Buy: Fee on USDT (quote).
+    Sell: Fee on BTC (base), converted to USD.
+    """
+    fee_pct = LIVE_CONFIG['taker_fee_pct']
+    if side == 'buy':
+        return amount * price * fee_pct  # Fee deducted from USDT
+    else:  # sell
+        return amount * price * fee_pct  # Fee deducted from BTC, valued in USD
 def check_trailing_stop(price):
     """
     Check and enforce trailing stop-loss.
@@ -154,12 +165,15 @@ def check_trailing_stop(price):
         logger.warning(f"TRAIL STOP HIT @ ${price:,.2f}")
         order = place_market_order('sell', position['amount'])
         if order:
-            pnl = (price - position['entry_price']) * position['amount']
+            # NEW: Adjust P/L for round-trip fees
+            entry_fee = position['entry_fee_usd']
+            exit_fee = calculate_fees('sell', position['amount'], price)
+            gross_pnl = (price - position['entry_price']) * position['amount']
+            pnl = gross_pnl - entry_fee - exit_fee
             logger.info(
-                f"Closed on stop | P/L: {pnl:+.2f} {LIVE_CONFIG['quote_currency']}")
-            # REMOVED: Simulated update (always real)
+                f"Closed on stop | Gross P/L: {gross_pnl:+.2f} | Fees: {entry_fee + exit_fee:.2f} | Net P/L: {pnl:+.2f} {LIVE_CONFIG['quote_currency']}")
             position.update(
-                {'in_position': False, 'entry_price': 0, 'amount': 0, 'highest_price': 0})
+                {'in_position': False, 'entry_price': 0, 'amount': 0, 'highest_price': 0, 'entry_fee_usd': 0})
         return True
     return False
 # Track last candle timestamp to avoid duplicates
@@ -203,27 +217,32 @@ def run_strategy():
             return
         order = place_market_order('buy', amount)
         if order:
-            # REMOVED: Simulated update (always real)
+            # NEW: Track entry fee for later P/L
+            entry_fee = calculate_fees('buy', amount, price)
             position.update({
                 'in_position': True,
                 'entry_price': price,
                 'amount': amount,
-                'highest_price': price
+                'highest_price': price,
+                'entry_fee_usd': entry_fee
             })
             logger.info(
-                f"BUY {amount:.6f} {LIVE_CONFIG['base_currency']} @ ${price:,.2f}")
+                f"BUY {amount:.6f} {LIVE_CONFIG['base_currency']} @ ${price:,.2f} | Est. Fee: {entry_fee:.2f} {LIVE_CONFIG['quote_currency']}")
     elif position['in_position'] and prev_s >= prev_l and curr_s < curr_l:
         order = place_market_order('sell', position['amount'])
         if order:
-            pnl = (price - position['entry_price']) * position['amount']
+            # NEW: Adjust P/L for round-trip fees
+            entry_fee = position['entry_fee_usd']
+            exit_fee = calculate_fees('sell', position['amount'], price)
+            gross_pnl = (price - position['entry_price']) * position['amount']
+            pnl = gross_pnl - entry_fee - exit_fee
             logger.info(
-                f"Death Cross exit | P/L: {pnl:+.2f} {LIVE_CONFIG['quote_currency']}")
-            # REMOVED: Simulated update (always real)
+                f"Death Cross exit | Gross P/L: {gross_pnl:+.2f} | Fees: {entry_fee + exit_fee:.2f} | Net P/L: {pnl:+.2f} {LIVE_CONFIG['quote_currency']}")
             position.update(
-                {'in_position': False, 'entry_price': 0, 'amount': 0, 'highest_price': 0})
+                {'in_position': False, 'entry_price': 0, 'amount': 0, 'highest_price': 0, 'entry_fee_usd': 0})
 def main():
     logger.info("HF MA BOT STARTED")
-    logger.info(f"{LIVE_CONFIG['candle_timeframe']} | {LIVE_CONFIG['short_window']}/{LIVE_CONFIG['long_window']} | {LIVE_CONFIG['position_size_pct']*100}% risk | ${LIVE_CONFIG['max_trade_usd']} cap | {LIVE_CONFIG['stop_loss_pct']*100}% trail")
+    logger.info(f"{LIVE_CONFIG['candle_timeframe']} | {LIVE_CONFIG['short_window']}/{LIVE_CONFIG['long_window']} | {LIVE_CONFIG['position_size_pct']*100}% risk | ${LIVE_CONFIG['max_trade_usd']} cap | {LIVE_CONFIG['stop_loss_pct']*100}% trail | Fee: {LIVE_CONFIG['taker_fee_pct']*100}%")
     if not LIVE_CONFIG['paper_trading']:
         confirm = input("\nREAL TRADING! Type 'YES' to continue: ")
         if confirm != "YES":
