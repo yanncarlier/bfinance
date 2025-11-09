@@ -23,8 +23,8 @@ LIVE_CONFIG = {
     'long_window': 50,             # Will be overridden by backtest if successful
     'position_size_pct': 0.05,     # RECOMMEND: Reduce from 0.2 for safety
     'max_trade_usd': 1000.0,       # Maximum USD to risk per trade
-    'stop_loss_pct': 0.02,         # RECOMMEND: Tighten from 0.2 for 1s
-    'schedule_minutes': 1/60,      # 1 second
+    'stop_loss_pct': 0.01,         # Tightened to 0.01 for volatility in 1s timeframe
+    'schedule_minutes': 10/60,      # 10 seconds to reduce API calls and churn
     'symbol': 'BTC/USDT',          # Trading pair
     'base_currency': 'BTC',
     'quote_currency': 'USDT',
@@ -63,6 +63,8 @@ exchange = ccxt.binance({
 # Log trading mode (paper or real)
 if LIVE_CONFIG['paper_trading']:
     logger.info("PAPER TRADING MODE - NO REAL ORDERS")
+    logger.info(
+        "Safety First: Test paper mode for 1hr, expect 100+ trades with 1s + 0.1% fees + tight stops = high churn/costs.")
 else:
     logger.warning("REAL TRADING MODE - ORDERS WILL EXECUTE!")
 # REMOVED: Simulated balance (now always using real balances for decisions)
@@ -217,7 +219,7 @@ def run_strategy():
     Execute MA crossover strategy logic.
     """
     global position, last_candle_ts
-    limit = LIVE_CONFIG['long_window'] + 10
+    limit = 300  # Cache more data: fetch 300s worth of 1s candles
     df = fetch_ohlcv(LIVE_CONFIG['symbol'],
                      LIVE_CONFIG['candle_timeframe'], limit)
     if df is None or len(df) < LIVE_CONFIG['long_window']:
@@ -236,6 +238,9 @@ def run_strategy():
     curr_l, prev_l = long_ma.iloc[-1], long_ma.iloc[-2]
     # logger.info(
     #     f"Price: ${price:,.2f} | MA{LIVE_CONFIG['short_window']}: {curr_s:,.2f} | MA{LIVE_CONFIG['long_window']}: {curr_l:,.2f}")
+    ###########
+    #     logger.info(f"Price: {price:.2f} | Short MA: {curr_s:.2f} (prev: {prev_s:.2f}) | Long MA: {curr_l:.2f} (prev: {prev_l:.2f}) | Cross? Golden:{prev_s <= prev_l and curr_s > curr_l} Death:{prev_s >= prev_l and curr_s < curr_l}")
+    ###########
     if position['in_position']:
         if check_trailing_stop(price):
             return
@@ -278,7 +283,7 @@ def run_strategy():
 
 def main():
     logger.info("HF MA BOT STARTED")
-    logger.info(f"{LIVE_CONFIG['candle_timeframe']} | {LIVE_CONFIG['short_window']}/{LIVE_CONFIG['long_window']} | {LIVE_CONFIG['position_size_pct']*100}% risk | ${LIVE_CONFIG['max_trade_usd']} cap | {LIVE_CONFIG['stop_loss_pct']*100}% trail | Fee: {LIVE_CONFIG['taker_fee_pct']*100}%")
+    logger.info(f"{LIVE_CONFIG['candle_timeframe']} | {LIVE_CONFIG['short_window']}/{LIVE_CONFIG['long_window']} | {LIVE_CONFIG['position_size_pct']*100}% risk | ${LIVE_CONFIG['max_trade_usd']} cap | {LIVE_CONFIG['stop_loss_pct']*100}% trail | Fee: {LIVE_CONFIG['taker_fee_pct']*100}% | Safety: 1s + 0.1% fees + tight stops = high churn/costs")
     if not LIVE_CONFIG['paper_trading']:
         confirm = input("\nREAL TRADING! Type 'YES' to continue: ")
         if confirm != "YES":
@@ -304,6 +309,8 @@ def main():
     except Exception as e:
         logger.error(f"Backtest failed: {e}. Using LIVE_CONFIG defaults")
         bt = pd.DataFrame()
+    logger.warning(
+        "Backtest Validation: backtest.py likely optimizes returns, but for 1s, add slippage/sim fees to avoid overfit.")
     # Log initial real balances
     real_bal = get_real_balances()
     logger.info(
