@@ -139,6 +139,20 @@ async def get_real_balances():
         return {'usdt': 0.0, 'btc': 0.0}
 
 
+async def log_balance_after_trade():
+    """
+    Log estimated total balance in USDT after a trade.
+    """
+    global current_price
+    try:
+        real_bal = await get_real_balances()
+        estimated_usdt = real_bal['usdt'] + real_bal['btc'] * current_price
+        logger.info(
+            f"Estimated Balance: {estimated_usdt:,.2f} {LIVE_CONFIG['quote_currency']} (USDT: {real_bal['usdt']:,.2f}, {LIVE_CONFIG['base_currency']}: {real_bal['btc']:.6f} @ ${current_price:,.2f})")
+    except Exception as e:
+        logger.error(f"Failed to log balance after trade: {e}")
+
+
 async def get_position_info():
     """
     NEW: Get detailed position info (size, side, entry_price).
@@ -256,6 +270,7 @@ async def check_trailing_stop(price):
                 'lowest_price': float('inf'),
                 'entry_fee_usd': 0.0
             }
+            await log_balance_after_trade()
         return True
     return False
 
@@ -291,6 +306,7 @@ async def check_trailing_short(price):
                 'lowest_price': float('inf'),
                 'entry_fee_usd': 0.0
             }
+            await log_balance_after_trade()
         return True
     return False
 
@@ -378,6 +394,7 @@ async def run_signal_strategy():
                     'lowest_price': float('inf'),
                     'entry_fee_usd': 0.0
                 }
+                await log_balance_after_trade()
         # Open long if none (works in spot OR futures)
         if position['type'] == 'none':
             usdt = await get_balance()
@@ -400,6 +417,7 @@ async def run_signal_strategy():
                 })
                 logger.info(
                     f"LONG {amount:.6f} {LIVE_CONFIG['base_currency']} @ ${price:,.2f} | Est. Fee: {entry_fee:.2f} {LIVE_CONFIG['quote_currency']}")
+                await log_balance_after_trade()
         # Remove any old "elif position['type'] == 'none' and market_type == 'spot':" block here—it was the bug causing ignores.
         ###################################################################
     elif bear_cross:
@@ -422,6 +440,7 @@ async def run_signal_strategy():
                     'lowest_price': float('inf'),
                     'entry_fee_usd': 0.0
                 }
+                await log_balance_after_trade()
         # Open short if none
         if position['type'] == 'none' and market_type == 'futures':  # Spot can't short
             usdt = await get_balance()
@@ -444,6 +463,7 @@ async def run_signal_strategy():
                 })
                 logger.info(
                     f"SHORT {amount:.6f} {LIVE_CONFIG['base_currency']} @ ${price:,.2f} | Est. Fee: {entry_fee:.2f} {LIVE_CONFIG['quote_currency']}")
+                await log_balance_after_trade()
         elif position['type'] == 'none' and market_type == 'spot':
             logger.info("Bear signal ignored (spot mode: no shorting)")
     else:
