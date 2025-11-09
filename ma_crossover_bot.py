@@ -19,16 +19,16 @@ if not API_KEY or not API_SECRET:
 # =============================================================================
 LIVE_CONFIG = {
     'candle_timeframe': '1s',
-    'short_window': 20,  # Will be overridden by backtest if successful
-    'long_window': 200,  # Will be overridden by backtest if successful
-    'position_size_pct': 0.05,  # RECOMMEND: Reduce from 0.2 for safety
-    'max_trade_usd': 1000.0,
-    'stop_loss_pct': 0.02,  # RECOMMEND: Tighten from 0.2 for 1s
-    'schedule_minutes': 1/60,  # 1 second
-    'symbol': 'BTC/USDT',
+    'short_window': 10,             # Will be overridden by backtest if successful
+    'long_window': 50,             # Will be overridden by backtest if successful
+    'position_size_pct': 0.05,     # RECOMMEND: Reduce from 0.2 for safety
+    'max_trade_usd': 1000.0,       # Maximum USD to risk per trade
+    'stop_loss_pct': 0.02,         # RECOMMEND: Tighten from 0.2 for 1s
+    'schedule_minutes': 1/60,      # 1 second
+    'symbol': 'BTC/USDT',          # Trading pair
     'base_currency': 'BTC',
     'quote_currency': 'USDT',
-    'taker_fee_pct': 0.001,  # 0.1% default; adjust for your tier
+    'taker_fee_pct': 0.001,         # 0.1% default; adjust for your tier
     'paper_trading': os.getenv('PAPER_TRADING', 'True').lower() == 'true',
 }
 # =============================================================================
@@ -36,8 +36,8 @@ LIVE_CONFIG = {
 # =============================================================================
 # API rate limits (Binance: ~1200 req/min).
 BACKTEST_CONFIG = {
-    'data_limit': 1000,  # 1000 ~17min data
-    'top_combos_to_display': 10,
+    'data_limit': 5000,  # 1000 ~17min data 5000 (~1.4hr data)
+    'top_combos_to_display': 10,   # Number of top combinations to print
 }
 # =============================================================================
 # SHARED/CORE SETUP (Not specific to backtest or live)

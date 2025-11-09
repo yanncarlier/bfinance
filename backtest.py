@@ -20,7 +20,7 @@ BACKTEST_CONFIG = {
     'candle_timeframe': '1s',      # Candle timeframe
     'symbol': 'BTC/USDT',          # Trading pair
     'init_usdt': 10000.0,          # Initial USDT balance for backtesting
-    'data_limit': 1000,
+    'data_limit': 5000,            # 1000 ~17min data 5000 (~1.4hr data)
     'top_combos_to_display': 10,   # Number of top combinations to print
 }
 # =============================================================================
