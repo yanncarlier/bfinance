@@ -147,8 +147,9 @@ async def log_balance_after_trade():
     try:
         real_bal = await get_real_balances()
         estimated_usdt = real_bal['usdt'] + real_bal['btc'] * current_price
-        logger.info(
-            f"Estimated Balance: {estimated_usdt:,.2f} {LIVE_CONFIG['quote_currency']} (USDT: {real_bal['usdt']:,.2f}, {LIVE_CONFIG['base_currency']}: {real_bal['btc']:.6f} @ ${current_price:,.2f})")
+        # Use ANSI escape codes for green color on console (file will have codes, but readable)
+        color_msg = f"\033[92mEstimated Balance: {estimated_usdt:,.2f} {LIVE_CONFIG['quote_currency']} (USDT: {real_bal['usdt']:,.2f}, {LIVE_CONFIG['base_currency']}: {real_bal['btc']:.6f} @ ${current_price:,.2f})\033[0m"
+        logger.info(color_msg)
     except Exception as e:
         logger.error(f"Failed to log balance after trade: {e}")
 
