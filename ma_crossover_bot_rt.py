@@ -22,7 +22,7 @@ LIVE_CONFIG = {
     'candle_timeframe': '1s',
     'short_window': 10,             # Will be overridden by backtest if successful
     'long_window': 50,             # Will be overridden by backtest if successful
-    'position_size_pct': 0.05,     # RECOMMEND: Reduce from 0.2 for safety
+    'position_size_pct': 0.2,     # RECOMMEND: Reduce from 0.2 for safety
     'max_trade_usd': 1000.0,       # Maximum USD to risk per trade
     'stop_loss_pct': 0.01,         # Tightened to 0.01 for volatility in 1s timeframe
     'symbol': 'BTC/USDT',          # Trading pair
