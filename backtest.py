@@ -42,6 +42,8 @@ exchange = ccxt.binance({
     'enableRateLimit': True,
     'options': {'defaultType': 'spot'}
 })
+
+
 def fetch_ohlcv(symbol, timeframe, limit):
     """
     Fetch OHLCV data from Binance.
@@ -63,6 +65,8 @@ def fetch_ohlcv(symbol, timeframe, limit):
     except Exception as e:
         print(f"Fetch failed: {e}")  # Use print for backtest visibility
         return None
+
+
 def calculate_adx(high, low, close, period=14):  # Optional trend filter
     """
     Calculate ADX for trend strength ( >25 = trending).
@@ -80,6 +84,8 @@ def calculate_adx(high, low, close, period=14):  # Optional trend filter
     dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
     adx = dx.ewm(span=period).mean()
     return adx
+
+
 def backtest_one(df, short_win, long_win,
                  init_usdt=BACKTEST_CONFIG['init_usdt'], pos_pct=STRATEGY_CONFIG['position_size_pct'],
                  max_usd=STRATEGY_CONFIG['max_trade_usd'], trail_pct=STRATEGY_CONFIG['stop_loss_pct'],
@@ -148,6 +154,8 @@ def backtest_one(df, short_win, long_win,
         'final_usdt': round(cash, 2),
         'buy_hold_%': round(buy_hold_ret, 3)  # New: Benchmark
     }
+
+
 def run_hf_backtest(
     limit=BACKTEST_CONFIG['data_limit'],
     symbol=BACKTEST_CONFIG['symbol'],
@@ -173,6 +181,7 @@ def run_hf_backtest(
     combos = list(product(short_range, long_range))
     print(f"Testing {len(combos)} combos...")
     results = []
+
     def worker(s, l):
         return backtest_one(df, s, l, use_adx_filter=use_adx_filter)
     with ThreadPoolExecutor(max_workers=max_workers) as ex:
@@ -187,6 +196,8 @@ def run_hf_backtest(
     if not out.empty:
         print(f"Buy & Hold: {out.iloc[0]['buy_hold_%']:.3f}% (over period)")
     return out
+
+
 def main():
     print("\nRunning backtest...")
     # Set True to test filtered version
@@ -196,5 +207,7 @@ def main():
             index=False))
         print(
             f"\nTop combo: {bt.iloc[0]['short']}/{bt.iloc[0]['long']} → {bt.iloc[0]['return_%']}%")
+
+
 if __name__ == "__main__":
     main()

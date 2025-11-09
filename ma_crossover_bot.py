@@ -78,6 +78,8 @@ position = {
 last_balance_fetch = 0
 cached_bal = {'usdt': 0.0, 'btc': 0.0}
 BALANCE_CACHE_REFRESH_SEC = 30  # Refresh every 30 seconds
+
+
 def get_real_balances():
     """
     Fetch real USDT and BTC balances from Binance (always real).
@@ -91,6 +93,8 @@ def get_real_balances():
     except Exception as e:
         logger.error(f"Real balance fetch error: {e}")
         return {'usdt': 0.0, 'btc': 0.0}
+
+
 def fetch_ohlcv(symbol, timeframe, limit, retries=3):
     limit = int(limit)  # FIX: Ensure int for API
     for attempt in range(retries):
@@ -108,6 +112,8 @@ def fetch_ohlcv(symbol, timeframe, limit, retries=3):
                 time.sleep(2 ** attempt)  # Exponential backoff
             else:
                 return None
+
+
 def get_balance():
     """
     Get USDT balance from exchange (always real, for trading decisions).
@@ -130,6 +136,8 @@ def get_balance():
             pass
     return cached_bal['usdt']
 # REMOVED: update_simulated_balance (no simulation)
+
+
 def calculate_position_size(usdt_balance, price):
     """
     Calculate BTC amount based on risk rules.
@@ -138,6 +146,8 @@ def calculate_position_size(usdt_balance, price):
               LIVE_CONFIG['position_size_pct'], LIVE_CONFIG['max_trade_usd'])
     amount = usd / price
     return round(amount, 6)
+
+
 def place_market_order(side, amount):
     """
     Place or simulate market order.
@@ -155,6 +165,8 @@ def place_market_order(side, amount):
     except Exception as e:
         logger.error(f"Order failed: {e}")
         return None
+
+
 def calculate_fees(side, amount, price):
     """
     NEW: Calculate approximate taker fees in USD.
@@ -166,6 +178,8 @@ def calculate_fees(side, amount, price):
         return amount * price * fee_pct  # Fee deducted from USDT
     else:  # sell
         return amount * price * fee_pct  # Fee deducted from BTC, valued in USD
+
+
 def check_trailing_stop(price):
     """
     Check and enforce trailing stop-loss.
@@ -192,8 +206,12 @@ def check_trailing_stop(price):
                 {'in_position': False, 'entry_price': 0, 'amount': 0, 'highest_price': 0, 'entry_fee_usd': 0})
         return True
     return False
+
+
 # Track last candle timestamp to avoid duplicates
 last_candle_ts = 0
+
+
 def run_strategy():
     """
     Execute MA crossover strategy logic.
@@ -256,6 +274,8 @@ def run_strategy():
                 f"Death Cross exit | Gross P/L: {gross_pnl:+.2f} | Fees: {entry_fee + exit_fee:.2f} | Net P/L: {pnl:+.2f} {LIVE_CONFIG['quote_currency']}")
             position.update(
                 {'in_position': False, 'entry_price': 0, 'amount': 0, 'highest_price': 0, 'entry_fee_usd': 0})
+
+
 def main():
     logger.info("HF MA BOT STARTED")
     logger.info(f"{LIVE_CONFIG['candle_timeframe']} | {LIVE_CONFIG['short_window']}/{LIVE_CONFIG['long_window']} | {LIVE_CONFIG['position_size_pct']*100}% risk | ${LIVE_CONFIG['max_trade_usd']} cap | {LIVE_CONFIG['stop_loss_pct']*100}% trail | Fee: {LIVE_CONFIG['taker_fee_pct']*100}%")
@@ -310,5 +330,7 @@ def main():
         except Exception as e:
             logger.critical(f"Error: {e}", exc_info=True)
             time.sleep(30)
+
+
 if __name__ == "__main__":
     main()
