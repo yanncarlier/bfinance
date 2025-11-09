@@ -221,6 +221,24 @@ async def place_market_order(side, amount):
         logger.info(
             f"[PAPER] {side.upper()} {abs(amount):.6f} {LIVE_CONFIG['base_currency']} @ market")
         return {'id': f"paper_{int(time.time())}", 'status': 'closed'}
+    # Fetch fresh balance before placing order
+    real_bal = await get_real_balances()
+    required_usd = abs(amount) * current_price
+    fee_usd = required_usd * LIVE_CONFIG['taker_fee_pct']
+    if side == 'buy':
+        if real_bal['usdt'] < required_usd + fee_usd:
+            logger.error(
+                f"Insufficient {LIVE_CONFIG['quote_currency']} for BUY {abs(amount):.6f} {LIVE_CONFIG['base_currency']} @ ${current_price:,.2f}: Need {required_usd + fee_usd:,.2f}, Have {real_bal['usdt']:,.2f}")
+            return None
+        logger.info(
+            f"Balance check OK for BUY: USDT {real_bal['usdt']:,.2f} >= {required_usd + fee_usd:,.2f}")
+    elif side == 'sell':
+        if market_type == 'spot' and real_bal['btc'] < abs(amount):
+            logger.error(
+                f"Insufficient {LIVE_CONFIG['base_currency']} for SELL {abs(amount):.6f} {LIVE_CONFIG['base_currency']} @ ${current_price:,.2f}: Need {abs(amount):.6f}, Have {real_bal['btc']:.6f}")
+            return None
+        logger.info(
+            f"Balance check OK for SELL: BTC {real_bal['btc']:.6f} >= {abs(amount):.6f}")
     try:
         order = await exchange.create_order(
             LIVE_CONFIG['symbol'], 'market', side, abs(amount))
@@ -375,6 +393,10 @@ async def run_signal_strategy():
     if bull_cross:
         # Close short if open (spot can't have one, but safe to check)
         if position['type'] == 'short':
+            # Update position size from real balance before closing
+            pos_info = await get_position_info()
+            if pos_info['size'] > 0:
+                position['size'] = pos_info['size']
             order = await place_market_order('buy', abs(position['size']))
             if order:
                 entry_fee = position['entry_fee_usd']
@@ -421,6 +443,10 @@ async def run_signal_strategy():
     elif bear_cross:
         # Close long if open
         if position['type'] == 'long':
+            # Update position size from real balance before closing
+            pos_info = await get_position_info()
+            if pos_info['size'] > 0:
+                position['size'] = pos_info['size']
             order = await place_market_order('sell', position['size'])
             if order:
                 entry_fee = position['entry_fee_usd']
