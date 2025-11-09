@@ -313,8 +313,53 @@ async def run_signal_strategy():
     curr_l, prev_l = long_ma.iloc[-1], long_ma.iloc[-2]
     bull_cross = prev_s <= prev_l and curr_s > curr_l
     bear_cross = prev_s >= prev_l and curr_s < curr_l
+    # if bull_cross:
+    #     # Close short if open
+    #     if position['type'] == 'short':
+    #         order = await place_market_order('buy', abs(position['size']))
+    #         if order:
+    #             entry_fee = position['entry_fee_usd']
+    #             exit_fee = calculate_fees('buy', abs(position['size']), price)
+    #             gross_pnl = (position['entry_price'] -
+    #                          price) * abs(position['size'])
+    #             pnl = gross_pnl - entry_fee - exit_fee
+    #             logger.info(
+    #                 f"Short exit on bull cross | Gross P/L: {gross_pnl:+.2f} | Fees: {entry_fee + exit_fee:.2f} | Net P/L: {pnl:+.2f} {LIVE_CONFIG['quote_currency']}")
+    #             position = {
+    #                 'type': 'none',
+    #                 'size': 0.0,
+    #                 'entry_price': 0.0,
+    #                 'highest_price': 0.0,
+    #                 'lowest_price': float('inf'),
+    #                 'entry_fee_usd': 0.0
+    #             }
+    #     # Open long if none
+    #     # Spot can't force open if no BTC, but futures can
+    #     if position['type'] == 'none' and market_type != 'spot':
+    #         usdt = await get_balance()
+    #         if usdt < 10:
+    #             logger.warning("Low balance")
+    #             return
+    #         amount = calculate_position_size(usdt, price)
+    #         if amount < 0.0001:
+    #             return
+    #         order = await place_market_order('buy', amount)
+    #         if order:
+    #             entry_fee = calculate_fees('buy', amount, price)
+    #             position.update({
+    #                 'type': 'long',
+    #                 'size': amount,
+    #                 'entry_price': price,
+    #                 'highest_price': price,
+    #                 'lowest_price': float('inf'),
+    #                 'entry_fee_usd': entry_fee
+    #             })
+    #             logger.info(
+    #                 f"LONG {amount:.6f} {LIVE_CONFIG['base_currency']} @ ${price:,.2f} | Est. Fee: {entry_fee:.2f} {LIVE_CONFIG['quote_currency']}")
+    #     elif position['type'] == 'none' and market_type == 'spot':
+    #         logger.info("Bull signal ignored (spot mode: no position to open)")
     if bull_cross:
-        # Close short if open
+        # Close short if open (spot can't have one, but safe to check)
         if position['type'] == 'short':
             order = await place_market_order('buy', abs(position['size']))
             if order:
@@ -333,9 +378,8 @@ async def run_signal_strategy():
                     'lowest_price': float('inf'),
                     'entry_fee_usd': 0.0
                 }
-        # Open long if none
-        # Spot can't force open if no BTC, but futures can
-        if position['type'] == 'none' and market_type != 'spot':
+        # Open long if none (works in spot OR futures)
+        if position['type'] == 'none':
             usdt = await get_balance()
             if usdt < 10:
                 logger.warning("Low balance")
@@ -356,8 +400,8 @@ async def run_signal_strategy():
                 })
                 logger.info(
                     f"LONG {amount:.6f} {LIVE_CONFIG['base_currency']} @ ${price:,.2f} | Est. Fee: {entry_fee:.2f} {LIVE_CONFIG['quote_currency']}")
-        elif position['type'] == 'none' and market_type == 'spot':
-            logger.info("Bull signal ignored (spot mode: no position to open)")
+        # Remove any old "elif position['type'] == 'none' and market_type == 'spot':" block here—it was the bug causing ignores.
+        ###################################################################
     elif bear_cross:
         # Close long if open
         if position['type'] == 'long':
