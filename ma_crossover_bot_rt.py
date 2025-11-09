@@ -32,7 +32,7 @@ LIVE_CONFIG = {
     'taker_fee_pct': 0.001,         # 0.1% default; adjust for your tier
     # NEW: 'spot' or 'futures' (use 'futures' for long/short)
     # Keep as 'futures' if you want shorting; change to 'spot' for long-only (no leverage possible)
-    'market_type': 'futures',
+    'market_type': 'spot',
     # NEW: Leverage for futures (ignored for spot) — set to 1 to disable amplification
     'leverage': 1,
     'paper_trading': os.getenv('PAPER_TRADING', 'True').lower() == 'true',
