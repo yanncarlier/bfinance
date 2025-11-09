@@ -24,7 +24,7 @@ LIVE_CONFIG = {
     'long_window': 50,             # Will be overridden by backtest if successful
     'position_size_pct': 0.2,     # RECOMMEND: Reduce from 0.2 for safety
     'max_trade_usd': 1000.0,       # Maximum USD to risk per trade
-    'stop_loss_pct': 0.01,         # Tightened to 0.01 for volatility in 1s timeframe
+    'stop_loss_pct': 0.1,         # Tightened to 0.01 for volatility in 1s timeframe
     'symbol': 'BTC/USDT',          # Trading pair
     'base_currency': 'BTC',
     'quote_currency': 'USDT',
@@ -324,21 +324,6 @@ async def price_poller():
             await asyncio.sleep(1)
 
 
-async def balance_poller():
-    """
-    Periodic balance checker for visibility.
-    """
-    while True:
-        try:
-            bal = await get_balance()
-            logger.info(
-                f"Balance check: {LIVE_CONFIG['quote_currency']} ${bal:,.2f} | {LIVE_CONFIG['base_currency']} {cached_bal['btc']:.6f} | In position: {position['in_position']}")
-            await asyncio.sleep(30)  # Every 30s
-        except Exception as e:
-            logger.error(f"Balance poller error: {e}")
-            await asyncio.sleep(30)
-
-
 async def main():
     logger.info("HF MA BOT STARTED")
     logger.info(f"{LIVE_CONFIG['candle_timeframe']} | {LIVE_CONFIG['short_window']}/{LIVE_CONFIG['long_window']} | {LIVE_CONFIG['position_size_pct']*100}% risk | ${LIVE_CONFIG['max_trade_usd']} cap | {LIVE_CONFIG['stop_loss_pct']*100}% trail | Fee: {LIVE_CONFIG['taker_fee_pct']*100}% | Polling for real-time data | Safety: 1s + 0.1% fees + tight stops = high churn/costs")
@@ -373,13 +358,29 @@ async def main():
     real_bal = await get_real_balances()
     logger.info(
         f"Initial Real Balances - {LIVE_CONFIG['quote_currency']}: {real_bal['usdt']:,.2f} | {LIVE_CONFIG['base_currency']}: {real_bal['btc']:.6f}")
+    # Initialize current price and position if existing BTC balance
+    try:
+        ticker = await exchange.fetch_ticker(LIVE_CONFIG['symbol'])
+        global current_price
+        current_price = ticker['last']
+        if real_bal['btc'] > 0.0001:
+            position.update({
+                'in_position': True,
+                'entry_price': current_price,
+                'amount': real_bal['btc'],
+                'highest_price': current_price,
+                'entry_fee_usd': 0.0  # No fee for existing position
+            })
+            logger.info(
+                f"Initialized existing position: {real_bal['btc']:.6f} {LIVE_CONFIG['base_currency']} @ ${current_price:,.2f} (for active management)")
+    except Exception as e:
+        logger.error(f"Failed to fetch initial ticker for position init: {e}")
     logger.info("Bot LIVE with Polling. Ctrl+C to stop.\n")
     # Start poller tasks
     candle_task = asyncio.create_task(candle_poller())
     price_task = asyncio.create_task(price_poller())
-    balance_task = asyncio.create_task(balance_poller())
     try:
-        await asyncio.gather(candle_task, price_task, balance_task)
+        await asyncio.gather(candle_task, price_task)
     except KeyboardInterrupt:
         logger.info("Stopped by user.")
     finally:
