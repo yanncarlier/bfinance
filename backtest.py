@@ -28,9 +28,9 @@ BACKTEST_CONFIG = {
 # =============================================================================
 # These are backtest defaults but can be overridden (e.g., from LIVE_CONFIG if imported)
 STRATEGY_CONFIG = {
-    'position_size_pct': 0.05,     # Risk percentage of balance per trade
+    'position_size_pct': 0.2,     # Risk percentage of balance per trade
     'max_trade_usd': 1000.0,       # Maximum USD to risk per trade
-    'stop_loss_pct': 0.02,         # Trailing stop-loss percentage
+    'stop_loss_pct': 0.2,         # Trailing stop-loss percentage
 }
 # =============================================================================
 # CORE SETUP (Not specific to backtest)
