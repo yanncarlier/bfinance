@@ -18,13 +18,13 @@ if not API_KEY or not API_SECRET:
 # LIVE TRADING CONFIGURATION (Trader Variables)
 # =============================================================================
 LIVE_CONFIG = {
-    'candle_timeframe': '5m',
-    'short_window': 7,  # Will be overridden by backtest if successful
-    'long_window': 30,  # Will be overridden by backtest if successful
-    'position_size_pct': 0.02,
+    'candle_timeframe': '1s',
+    'short_window': 20,  # Will be overridden by backtest if successful
+    'long_window': 200,  # Will be overridden by backtest if successful
+    'position_size_pct': 0.05,  # RECOMMEND: Reduce from 0.2 for safety
     'max_trade_usd': 1000.0,
-    'stop_loss_pct': 0.05,
-    'schedule_minutes': 1,
+    'stop_loss_pct': 0.02,  # RECOMMEND: Tighten from 0.2 for 1s
+    'schedule_minutes': 1/60,  # 1 second
     'symbol': 'BTC/USDT',
     'base_currency': 'BTC',
     'quote_currency': 'USDT',
@@ -34,8 +34,9 @@ LIVE_CONFIG = {
 # =============================================================================
 # BACKTEST CONFIGURATION (Backtest Variables)
 # =============================================================================
+# API rate limits (Binance: ~1200 req/min).
 BACKTEST_CONFIG = {
-    'data_limit': 1000,  # UPGRADE: ~3.5 days for more signals
+    'data_limit': 1000,  # 1000 ~17min data
     'top_combos_to_display': 10,
 }
 # =============================================================================
@@ -73,6 +74,10 @@ position = {
     'highest_price': 0.0,
     'entry_fee_usd': 0.0  # NEW: Track entry fee for accurate P/L
 }
+# NEW: Cache for balance fetches to reduce API calls
+last_balance_fetch = 0
+cached_bal = {'usdt': 0.0, 'btc': 0.0}
+BALANCE_CACHE_REFRESH_SEC = 30  # Refresh every 30 seconds
 def get_real_balances():
     """
     Fetch real USDT and BTC balances from Binance (always real).
@@ -95,7 +100,7 @@ def fetch_ohlcv(symbol, timeframe, limit, retries=3):
                 raw, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
             df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
             df.set_index('timestamp', inplace=True)
-            logger.info(f"Fetched {len(df)} candles successfully")
+            # logger.info(f"Fetched {len(df)} candles successfully")
             return df
         except Exception as e:
             logger.error(f"OHLCV fetch attempt {attempt+1} failed: {e}")
@@ -107,12 +112,23 @@ def get_balance():
     """
     Get USDT balance from exchange (always real, for trading decisions).
     """
-    try:
-        bal = exchange.fetch_balance()
-        return bal['total'].get(LIVE_CONFIG['quote_currency'], 0.0)
-    except Exception as e:
-        logger.error(f"Balance error: {e}")
-        return 0.0
+    global last_balance_fetch, cached_bal
+    now = time.time()
+    if now - last_balance_fetch > BALANCE_CACHE_REFRESH_SEC:
+        try:
+            bal = exchange.fetch_balance()
+            cached_bal['usdt'] = bal['total'].get(
+                LIVE_CONFIG['quote_currency'], 0.0)
+            cached_bal['btc'] = bal['total'].get(
+                LIVE_CONFIG['base_currency'], 0.0)
+            last_balance_fetch = now
+            logger.debug(
+                f"Balance cache refreshed at {datetime.now().strftime('%H:%M:%S')}")
+        except Exception as e:
+            logger.error(f"Balance fetch error: {e}")
+            # Return cached or 0
+            pass
+    return cached_bal['usdt']
 # REMOVED: update_simulated_balance (no simulation)
 def calculate_position_size(usdt_balance, price):
     """
@@ -200,8 +216,8 @@ def run_strategy():
     long_ma = close.rolling(LIVE_CONFIG['long_window']).mean()
     curr_s, prev_s = short_ma.iloc[-1], short_ma.iloc[-2]
     curr_l, prev_l = long_ma.iloc[-1], long_ma.iloc[-2]
-    logger.info(
-        f"Price: ${price:,.2f} | MA{LIVE_CONFIG['short_window']}: {curr_s:,.2f} | MA{LIVE_CONFIG['long_window']}: {curr_l:,.2f}")
+    # logger.info(
+    #     f"Price: ${price:,.2f} | MA{LIVE_CONFIG['short_window']}: {curr_s:,.2f} | MA{LIVE_CONFIG['long_window']}: {curr_l:,.2f}")
     if position['in_position']:
         if check_trailing_stop(price):
             return
@@ -277,17 +293,16 @@ def main():
     while True:
         try:
             cycle += 1
-            logger.info(
-                f"--- CYCLE {cycle} @ {datetime.now().strftime('%H:%M:%S')} ---")
+            # logger.info(
+            #     f"--- CYCLE {cycle} @ {datetime.now().strftime('%H:%M:%S')} ---")
             start = time.time()
             run_strategy()
             usdt_balance = get_balance()  # Always real USDT
-            real_bal = get_real_balances()  # Always real for display
             logger.info(
-                f"{LIVE_CONFIG['quote_currency']} Balance: {usdt_balance:,.2f} | Real {LIVE_CONFIG['base_currency']} Balance: {real_bal['btc']:.6f}")
+                f"{LIVE_CONFIG['quote_currency']} {usdt_balance:,.2f} | {LIVE_CONFIG['base_currency']} {cached_bal['btc']:.6f}")
             elapsed = time.time() - start
             sleep = max(0, LIVE_CONFIG['schedule_minutes'] * 60 - elapsed)
-            logger.info(f"Cycle done in {elapsed:.1f}s | Sleep {sleep:.0f}s")
+            # logger.info(f"Cycle done in {elapsed:.1f}s | Sleep {sleep:.0f}s")
             time.sleep(sleep)
         except KeyboardInterrupt:
             logger.info("Stopped by user.")

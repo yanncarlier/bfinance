@@ -17,11 +17,10 @@ if not API_KEY or not API_SECRET:
 # BACKTEST CONFIGURATION (Backtest-Specific Variables)
 # =============================================================================
 BACKTEST_CONFIG = {
-    'candle_timeframe': '5m',      # Candle timeframe
+    'candle_timeframe': '1s',      # Candle timeframe
     'symbol': 'BTC/USDT',          # Trading pair
     'init_usdt': 10000.0,          # Initial USDT balance for backtesting
-    # FIX: Default to ~5 days (was 100000; balance speed/accuracy)
-    'data_limit': 1440,
+    'data_limit': 1000,
     'top_combos_to_display': 10,   # Number of top combinations to print
 }
 # =============================================================================
@@ -29,9 +28,9 @@ BACKTEST_CONFIG = {
 # =============================================================================
 # These are backtest defaults but can be overridden (e.g., from LIVE_CONFIG if imported)
 STRATEGY_CONFIG = {
-    'position_size_pct': 0.02,     # Risk percentage of balance per trade
+    'position_size_pct': 0.05,     # Risk percentage of balance per trade
     'max_trade_usd': 1000.0,       # Maximum USD to risk per trade
-    'stop_loss_pct': 0.05,         # Trailing stop-loss percentage
+    'stop_loss_pct': 0.02,         # Trailing stop-loss percentage
 }
 # =============================================================================
 # CORE SETUP (Not specific to backtest)
