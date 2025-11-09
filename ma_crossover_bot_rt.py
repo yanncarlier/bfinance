@@ -250,7 +250,6 @@ async def check_trailing_stop(price):
         return False
     if price > position['highest_price']:
         position['highest_price'] = price
-        logger.info(f"New high: ${price:,.2f}")
     stop = position['highest_price'] * (1 - LIVE_CONFIG['stop_loss_pct'])
     if price <= stop:
         logger.warning(f"TRAIL STOP HIT (LONG) @ ${price:,.2f}")
@@ -284,7 +283,6 @@ async def check_trailing_short(price):
         return False
     if price < position['lowest_price']:
         position['lowest_price'] = price
-        logger.info(f"New low: ${price:,.2f}")
     target = position['lowest_price'] * (1 + LIVE_CONFIG['stop_loss_pct'])
     if price >= target:
         logger.warning(f"TRAIL TARGET HIT (SHORT) @ ${price:,.2f}")
