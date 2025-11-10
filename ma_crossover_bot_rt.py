@@ -93,12 +93,45 @@ last_candle_ts = 0
 last_balance_fetch = 0
 cached_bal = {'usdt': 0.0, 'btc': 0.0}
 BALANCE_CACHE_REFRESH_SEC = 30  # Refresh every 30 seconds
+# =============================================================================
+# COLOR HELPER FUNCTIONS
+# =============================================================================
+
+
+def color_pct(pct):
+    """Green for positive, red for negative percentage."""
+    if pct > 0:
+        return f"\033[32m{pct:.3f}\033[0m"
+    elif pct < 0:
+        return f"\033[31m{pct:.3f}\033[0m"
+    else:
+        return f"{pct:.3f}"
+
+
+def color_value(val, fmt=":.2f"):
+    """Green for positive, red for negative value."""
+    if val > 0:
+        return f"\033[32m{val:{fmt}}\033[0m"
+    elif val < 0:
+        return f"\033[31m{val:{fmt}}\033[0m"
+    else:
+        return f"{val:{fmt}}"
+
+
+def print_colored_table(df):
+    """Print backtest results with colored return_% and buy_hold_%."""
+    print(f"{'short':>5} {'long':>5} {'return_%':>10} {'trades':>7} {'winrate_%':>10} {'max_dd_%':>9} {'final_usdt':>11} {'buy_hold_%':>11}")
+    for _, row in df.iterrows():
+        ret_col = color_pct(row['return_%'])
+        bh_col = color_pct(row['buy_hold_%'])
+        print(f"{row['short']:>5} {row['long']:>5} {ret_col:>10} {row['trades']:>7} {row['winrate_%']:>10.1f} {row['max_dd_%']:>9.2f} {row['final_usdt']:>11,.2f} {bh_col:>11}")
+# =============================================================================
+# CORE FUNCTIONS
+# =============================================================================
 
 
 async def get_real_balances():
-    """
-    Fetch real balances for spot: free USDT and total BTC holdings.
-    """
+    """Fetch real balances for spot: free USDT and total BTC holdings."""
     try:
         bal = await exchange.fetch_balance()
         quote_free = bal[LIVE_CONFIG['quote_currency']]['free']
@@ -110,9 +143,7 @@ async def get_real_balances():
 
 
 async def log_balance_after_trade():
-    """
-    Log estimated total balance in USDT after a trade (colored for console).
-    """
+    """Log estimated total balance in USDT after a trade (colored)."""
     global current_price
     try:
         real_bal = await get_real_balances()
@@ -124,14 +155,11 @@ async def log_balance_after_trade():
 
 
 async def get_position_info():
-    """
-    Get current spot position: treat BTC holdings as long position.
-    """
+    """Get current spot position: treat BTC holdings as long position."""
     try:
         bal = await exchange.fetch_balance()
         size = bal[LIVE_CONFIG['base_currency']]['total']
         if size > 0.0001:
-            # Approx entry
             return {'size': size, 'side': 'long', 'entry_price': current_price}
         return {'size': 0, 'side': None, 'entry_price': 0}
     except Exception as e:
@@ -140,9 +168,7 @@ async def get_position_info():
 
 
 async def get_balance():
-    """
-    Get cached free USDT balance (for position sizing).
-    """
+    """Get cached free USDT balance (for position sizing)."""
     global last_balance_fetch, cached_bal
     now = time.time()
     if now - last_balance_fetch > BALANCE_CACHE_REFRESH_SEC:
@@ -159,9 +185,7 @@ async def get_balance():
 
 
 def calculate_position_size(usdt_balance, price):
-    """
-    Calculate BTC amount based on risk rules: min(pct of balance, max USD) / price.
-    """
+    """Calculate BTC amount based on risk rules."""
     usd = min(usdt_balance *
               LIVE_CONFIG['position_size_pct'], LIVE_CONFIG['max_trade_usd'])
     amount = usd / price
@@ -169,29 +193,25 @@ def calculate_position_size(usdt_balance, price):
 
 
 async def place_market_order(side, amount):
-    """
-    Place or simulate market order on spot (buy/sell BTC with USDT).
-    Amount is positive BTC quantity.
-    """
+    """Place or simulate market order on spot."""
     if LIVE_CONFIG['paper_trading']:
         logger.info(
             f"[PAPER] {side.upper()} {amount:.6f} {LIVE_CONFIG['base_currency']} @ market")
         return {'id': f"paper_{int(time.time())}", 'status': 'closed'}
-    # Fetch fresh balance before order
     real_bal = await get_real_balances()
     required_usd = amount * current_price
     fee_usd = required_usd * LIVE_CONFIG['taker_fee_pct']
     if side == 'buy':
         if real_bal['usdt'] < required_usd + fee_usd:
             logger.error(
-                f"Insufficient USDT for BUY {amount:.6f} BTC @ ${current_price:,.2f}: Need {required_usd + fee_usd:,.2f}, Have {real_bal['usdt']:,.2f}")
+                f"Insufficient USDT for BUY {amount:.6f} BTC @ ${current_price:,.2f}")
             return None
         logger.info(
             f"Balance OK for BUY: USDT {real_bal['usdt']:,.2f} >= {required_usd + fee_usd:,.2f}")
     elif side == 'sell':
         if real_bal['btc'] < amount:
             logger.error(
-                f"Insufficient BTC for SELL {amount:.6f} BTC @ ${current_price:,.2f}: Need {amount:.6f}, Have {real_bal['btc']:.6f}")
+                f"Insufficient BTC for SELL {amount:.6f} BTC @ ${current_price:,.2f}")
             return None
         logger.info(
             f"Balance OK for SELL: BTC {real_bal['btc']:.6f} >= {amount:.6f}")
@@ -206,24 +226,16 @@ async def place_market_order(side, amount):
 
 
 def calculate_fees(side, amount, price):
-    """
-    Calculate approximate taker fees in USD based on notional value.
-    """
+    """Calculate taker fees in USD."""
     notional = amount * price
     return notional * LIVE_CONFIG['taker_fee_pct']
 
 
 def ema(series, period):
-    """
-    Calculate Exponential Moving Average (EMA).
-    """
     return series.ewm(span=period, adjust=False).mean()
 
 
 def rsi(series, period):
-    """
-    Calculate Relative Strength Index (RSI).
-    """
     delta = series.diff()
     gain = delta.where(delta > 0, 0).rolling(window=period).mean()
     loss = -delta.where(delta < 0, 0).rolling(window=period).mean()
@@ -232,9 +244,6 @@ def rsi(series, period):
 
 
 def calculate_adx(high, low, close, period):
-    """
-    Calculate Average Directional Index (ADX) for trend strength.
-    """
     tr = pd.DataFrame({
         'hl': high - low,
         'hc': abs(high - close.shift()),
@@ -251,21 +260,15 @@ def calculate_adx(high, low, close, period):
 
 
 async def check_trailing_stop(price):
-    """
-    Check trailing stop-loss and fixed take-profit for long position.
-    Updates highest price and triggers close if hit.
-    """
+    """Check trailing stop-loss and take-profit."""
     global position
     if position['type'] != 'long' or position['size'] <= 0:
         return False
-    # Update trailing high
     if price > position['highest_price']:
         position['highest_price'] = price
-    # Calculate levels
     stop_price = position['highest_price'] * \
         (1 - LIVE_CONFIG['trailing_stop_pct'])
     tp_price = position['entry_price'] * (1 + LIVE_CONFIG['take_profit_pct'])
-    # Check stop-loss first (protective)
     if price <= stop_price:
         logger.warning(f"TRAILING STOP HIT (LONG) @ ${price:,.2f}")
         order = await place_market_order('sell', position['size'])
@@ -274,18 +277,14 @@ async def check_trailing_stop(price):
             exit_fee = calculate_fees('sell', position['size'], price)
             gross_pnl = (price - position['entry_price']) * position['size']
             pnl = gross_pnl - entry_fee - exit_fee
+            gross_col = color_value(gross_pnl, "+:.2f")
+            pnl_col = color_value(pnl, "+:.2f")
             logger.info(
-                f"Long closed on TRAILING STOP | Gross P/L: {gross_pnl:+.2f} | Fees: {entry_fee + exit_fee:.2f} | Net P/L: {pnl:+.2f} {LIVE_CONFIG['quote_currency']}")
-            position = {
-                'type': 'none',
-                'size': 0.0,
-                'entry_price': 0.0,
-                'highest_price': 0.0,
-                'entry_fee_usd': 0.0
-            }
+                f"Long closed on TRAILING STOP | Gross P/L: {gross_col} | Fees: {entry_fee + exit_fee:.2f} | Net P/L: {pnl_col} {LIVE_CONFIG['quote_currency']}")
+            position = {'type': 'none', 'size': 0.0, 'entry_price': 0.0,
+                        'highest_price': 0.0, 'entry_fee_usd': 0.0}
             await log_balance_after_trade()
         return True
-    # Check take-profit
     elif price >= tp_price:
         logger.warning(f"TAKE PROFIT HIT (LONG) @ ${price:,.2f}")
         order = await place_market_order('sell', position['size'])
@@ -294,27 +293,19 @@ async def check_trailing_stop(price):
             exit_fee = calculate_fees('sell', position['size'], price)
             gross_pnl = (price - position['entry_price']) * position['size']
             pnl = gross_pnl - entry_fee - exit_fee
+            gross_col = color_value(gross_pnl, "+:.2f")
+            pnl_col = color_value(pnl, "+:.2f")
             logger.info(
-                f"Long closed on TAKE PROFIT | Gross P/L: {gross_pnl:+.2f} | Fees: {entry_fee + exit_fee:.2f} | Net P/L: {pnl:+.2f} {LIVE_CONFIG['quote_currency']}")
-            position = {
-                'type': 'none',
-                'size': 0.0,
-                'entry_price': 0.0,
-                'highest_price': 0.0,
-                'entry_fee_usd': 0.0
-            }
+                f"Long closed on TAKE PROFIT | Gross P/L: {gross_col} | Fees: {entry_fee + exit_fee:.2f} | Net P/L: {pnl_col} {LIVE_CONFIG['quote_currency']}")
+            position = {'type': 'none', 'size': 0.0, 'entry_price': 0.0,
+                        'highest_price': 0.0, 'entry_fee_usd': 0.0}
             await log_balance_after_trade()
         return True
     return False
 
 
 async def run_signal_strategy():
-    """
-    Execute EMA crossover strategy for spot long-only with ADX and RSI filters.
-    - Bull cross (short EMA > long EMA) + ADX > threshold + RSI < overbought: Open long if flat.
-    - Bear cross (short EMA < long EMA) or RSI > overbought: Close long if open.
-    - No cross: Hold if in position.
-    """
+    """Execute EMA crossover with ADX/RSI filters."""
     global position, df_candles
     if len(df_candles) < max(LIVE_CONFIG['long_window'], LIVE_CONFIG['rsi_period'], LIVE_CONFIG['adx_period']):
         logger.warning(f"Insufficient data: {len(df_candles)} candles")
@@ -333,73 +324,48 @@ async def run_signal_strategy():
     rsi_val = rsi(close, LIVE_CONFIG['rsi_period']).iloc[-1]
     adx_ok = adx > LIVE_CONFIG['adx_threshold']
     rsi_buy_ok = rsi_val < LIVE_CONFIG['rsi_overbought']
-    # Additional close condition
     rsi_sell_ok = rsi_val > LIVE_CONFIG['rsi_overbought']
-    if bull_cross and adx_ok and rsi_buy_ok:
-        if position['type'] == 'none':
-            usdt = await get_balance()
-            if usdt < 10:
-                logger.warning("Low USDT balance for entry")
-                return
-            amount = calculate_position_size(usdt, price)
-            if amount < 0.0001:
-                logger.debug("Calculated position too small")
-                return
-            order = await place_market_order('buy', amount)
-            if order:
-                entry_fee = calculate_fees('buy', amount, price)
-                position.update({
-                    'type': 'long',
-                    'size': amount,
-                    'entry_price': price,
-                    'highest_price': price,
-                    'entry_fee_usd': entry_fee
-                })
-                logger.info(
-                    f"OPEN LONG {amount:.6f} {LIVE_CONFIG['base_currency']} @ ${price:,.2f} | Est. Fee: {entry_fee:.2f} {LIVE_CONFIG['quote_currency']} | ADX: {adx:.2f} | RSI: {rsi_val:.2f}")
-                await log_balance_after_trade()
-    elif bear_cross or rsi_sell_ok:
-        if position['type'] == 'long':
-            # Sync size from real balance before close
-            pos_info = await get_position_info()
-            if pos_info['size'] > 0:
-                position['size'] = pos_info['size']
-            order = await place_market_order('sell', position['size'])
-            if order:
-                entry_fee = position['entry_fee_usd']
-                exit_fee = calculate_fees('sell', position['size'], price)
-                gross_pnl = (
-                    price - position['entry_price']) * position['size']
-                pnl = gross_pnl - entry_fee - exit_fee
-                logger.info(
-                    f"CLOSE LONG @ ${price:,.2f} | Gross P/L: {gross_pnl:+.2f} | Fees: {entry_fee + exit_fee:.2f} | Net P/L: {pnl:+.2f} {LIVE_CONFIG['quote_currency']} | ADX: {adx:.2f} | RSI: {rsi_val:.2f}")
-                position = {
-                    'type': 'none',
-                    'size': 0.0,
-                    'entry_price': 0.0,
-                    'highest_price': 0.0,
-                    'entry_fee_usd': 0.0
-                }
-                await log_balance_after_trade()
-    else:
-        # No crossover: hold position or stay flat
-        if position['type'] == 'long':
-            logger.debug(
-                f"Holding LONG {position['size']:.6f} BTC - trailing active | ADX: {adx:.2f} | RSI: {rsi_val:.2f}")
-        else:
-            logger.debug("No signal - remaining flat")
+    if bull_cross and adx_ok and rsi_buy_ok and position['type'] == 'none':
+        usdt = await get_balance()
+        if usdt < 10:
+            logger.warning("Low USDT balance for entry")
+            return
+        amount = calculate_position_size(usdt, price)
+        if amount < 0.0001:
+            return
+        order = await place_market_order('buy', amount)
+        if order:
+            entry_fee = calculate_fees('buy', amount, price)
+            position.update({
+                'type': 'long', 'size': amount, 'entry_price': price,
+                'highest_price': price, 'entry_fee_usd': entry_fee
+            })
+            logger.info(
+                f"OPEN LONG {amount:.6f} {LIVE_CONFIG['base_currency']} @ ${price:,.2f} | Fee: {entry_fee:.2f} | ADX: {adx:.2f} | RSI: {rsi_val:.2f}")
+            await log_balance_after_trade()
+    elif (bear_cross or rsi_sell_ok) and position['type'] == 'long':
+        pos_info = await get_position_info()
+        if pos_info['size'] > 0:
+            position['size'] = pos_info['size']
+        order = await place_market_order('sell', position['size'])
+        if order:
+            entry_fee = position['entry_fee_usd']
+            exit_fee = calculate_fees('sell', position['size'], price)
+            gross_pnl = (price - position['entry_price']) * position['size']
+            pnl = gross_pnl - entry_fee - exit_fee
+            gross_col = color_value(gross_pnl, "+:.2f")
+            pnl_col = color_value(pnl, "+:.2f")
+            logger.info(
+                f"CLOSE LONG @ ${price:,.2f} | Gross P/L: {gross_col} | Fees: {entry_fee + exit_fee:.2f} | Net P/L: {pnl_col} {LIVE_CONFIG['quote_currency']} | ADX: {adx:.2f} | RSI: {rsi_val:.2f}")
+            position = {'type': 'none', 'size': 0.0, 'entry_price': 0.0,
+                        'highest_price': 0.0, 'entry_fee_usd': 0.0}
+            await log_balance_after_trade()
 
 
 async def candle_poller():
-    """
-    Poll for new closed candles and trigger strategy on update.
-    For 1h, poll every 60s; maintain ~100 candles (~4 days).
-    """
     global df_candles, last_candle_ts
     timeframe = LIVE_CONFIG['candle_timeframe']
     logger.info("Starting candle poller...")
-    cycle_count = 0
-    # Initial load
     try:
         ohlcv = await exchange.fetch_ohlcv(LIVE_CONFIG['symbol'], timeframe, limit=100)
         df_candles = pd.DataFrame(
@@ -415,11 +381,7 @@ async def candle_poller():
         return
     while True:
         try:
-            await asyncio.sleep(60)  # Poll every 60 seconds for 1h candles
-            cycle_count += 1
-            if cycle_count % 60 == 0:
-                logger.info(
-                    f"Candle poller alive: {len(df_candles)} candles, last {pd.to_datetime(last_candle_ts, unit='s')}")
+            await asyncio.sleep(60)
             new_ohlcv = await exchange.fetch_ohlcv(LIVE_CONFIG['symbol'], timeframe, limit=2)
             if len(new_ohlcv) < 2:
                 continue
@@ -430,10 +392,9 @@ async def candle_poller():
             new_df.set_index('timestamp', inplace=True)
             new_ts = int(new_df.index[-1].timestamp())
             if new_ts > last_candle_ts:
-                # Append new closed candle
                 new_row = new_df.iloc[-1]
-                df_candles = pd.concat([df_candles, new_row.to_frame().T])
-                df_candles = df_candles.tail(100)  # Keep recent history
+                df_candles = pd.concat(
+                    [df_candles, new_row.to_frame().T]).tail(100)
                 last_candle_ts = new_ts
                 await run_signal_strategy()
         except Exception as e:
@@ -442,43 +403,30 @@ async def candle_poller():
 
 
 async def price_poller():
-    """
-    Poll real-time price for trailing stop checks (every 30s for 1h strategy).
-    """
     global current_price
     logger.info("Starting price poller...")
-    price_cycle = 0
     while True:
         try:
             ticker = await exchange.fetch_ticker(LIVE_CONFIG['symbol'])
             current_price = ticker['last']
-            # Check trailing for active long
             if position['type'] == 'long':
                 await check_trailing_stop(current_price)
-            price_cycle += 1
-            if price_cycle % 120 == 0:  # Log every ~60m
-                logger.info(
-                    f"Price poller alive: ${current_price:,.2f} | Position: {position['type']} {position['size']:.6f} BTC")
-            await asyncio.sleep(30)  # Poll every 30s for 1h
+            await asyncio.sleep(30)
         except Exception as e:
             logger.error(f"Price poller error: {e}")
             await asyncio.sleep(30)
 
 
 async def main():
-    """
-    Main entry: Run backtest with ADX filter, init, and start pollers.
-    """
     logger.info(
         "SPOT LONG-ONLY EMA CROSSOVER BOT STARTED (with ADX/RSI filters)")
-    logger.info(f"{LIVE_CONFIG['candle_timeframe']} candles | EMA {LIVE_CONFIG['short_window']}/{LIVE_CONFIG['long_window']} | {LIVE_CONFIG['position_size_pct']*100}% risk | ${LIVE_CONFIG['max_trade_usd']} cap | {LIVE_CONFIG['trailing_stop_pct']*100}% trail stop | {LIVE_CONFIG['take_profit_pct']*100}% TP | {LIVE_CONFIG['taker_fee_pct']*100}% fee | ADX > {LIVE_CONFIG['adx_threshold']} | RSI < {LIVE_CONFIG['rsi_overbought']} for entry")
+    logger.info(f"{LIVE_CONFIG['candle_timeframe']} | EMA {LIVE_CONFIG['short_window']}/{LIVE_CONFIG['long_window']} | Risk: {LIVE_CONFIG['position_size_pct']*100}% | Cap: ${LIVE_CONFIG['max_trade_usd']} | TP: {LIVE_CONFIG['take_profit_pct']*100}% | Trail: {LIVE_CONFIG['trailing_stop_pct']*100}% | ADX>{LIVE_CONFIG['adx_threshold']} | RSI<{LIVE_CONFIG['rsi_overbought']}")
     if not LIVE_CONFIG['paper_trading']:
-        confirm = input(
-            "\nREAL TRADING CONFIRMATION! Type 'YES' to continue: ")
+        confirm = input("\nREAL TRADING! Type 'YES' to continue: ")
         if confirm != "YES":
             logger.info("Confirmation failed - exiting.")
             return
-    print("\nRunning quick backtest for EMA optimization...")
+    print("\nRunning backtest for EMA optimization...")
     try:
         bt = backtest.run_hf_backtest(
             limit=BACKTEST_CONFIG['data_limit'], use_adx_filter=True)
@@ -486,23 +434,19 @@ async def main():
             LIVE_CONFIG['short_window'] = int(bt.iloc[0]['short'])
             LIVE_CONFIG['long_window'] = int(bt.iloc[0]['long'])
             logger.info(
-                f"Backtest override: Using EMA {LIVE_CONFIG['short_window']}/{LIVE_CONFIG['long_window']} ({bt.iloc[0]['return_%']}%)")
-            print(bt.head(BACKTEST_CONFIG['top_combos_to_display']).to_string(
-                index=False))
+                f"Backtest override: Using EMA {LIVE_CONFIG['short_window']}/{LIVE_CONFIG['long_window']} ({bt.iloc[0]['return_%']:.3f}%)")
+            print_colored_table(
+                bt.head(BACKTEST_CONFIG['top_combos_to_display']))
+            ret_colored = color_pct(bt.iloc[0]['return_%'])
             print(
-                f"\nTop combo: {bt.iloc[0]['short']}/{bt.iloc[0]['long']} → {bt.iloc[0]['return_%']}% return")
+                f"\nTop combo: {bt.iloc[0]['short']}/{bt.iloc[0]['long']} → {ret_colored}% return")
         else:
-            logger.warning("Backtest returned empty; using config defaults")
+            logger.warning("Backtest empty; using defaults")
     except Exception as e:
-        logger.error(f"Backtest failed: {e}. Using config defaults")
-        bt = pd.DataFrame()
-    # logger.warning(
-        # "Backtest Note: Optimized for spot with fees/slippage; review for realism.")
-    # Log initial balances
+        logger.error(f"Backtest failed: {e}")
     real_bal = await get_real_balances()
     logger.info(
         f"Initial Balances - {LIVE_CONFIG['quote_currency']}: {real_bal['usdt']:,.2f} | {LIVE_CONFIG['base_currency']}: {real_bal['btc']:.6f}")
-    # Init current price and sync existing position
     try:
         ticker = await exchange.fetch_ticker(LIVE_CONFIG['symbol'])
         global current_price
@@ -510,25 +454,14 @@ async def main():
         pos_info = await get_position_info()
         if pos_info['size'] > 0.0001:
             position.update({
-                'type': 'long',
-                'size': pos_info['size'],
-                'entry_price': pos_info['entry_price'],
-                'highest_price': current_price,
-                'entry_fee_usd': 0.0  # Unknown for existing
+                'type': 'long', 'size': pos_info['size'], 'entry_price': pos_info['entry_price'],
+                'highest_price': current_price, 'entry_fee_usd': 0.0
             })
             logger.info(
-                f"Initialized existing LONG: {position['size']:.6f} {LIVE_CONFIG['base_currency']} @ ${current_price:,.2f} (entry ~${pos_info['entry_price']:,.2f})")
+                f"Resumed LONG: {position['size']:.6f} BTC @ ${current_price:,.2f}")
     except Exception as e:
-        logger.error(f"Initial ticker/position init error: {e}")
-    logger.info("Bot LIVE with pollers running. Ctrl+C to stop.\n")
-    # Start async tasks
-    candle_task = asyncio.create_task(candle_poller())
-    price_task = asyncio.create_task(price_poller())
-    try:
-        await asyncio.gather(candle_task, price_task)
-    except KeyboardInterrupt:
-        logger.info("Bot stopped by user.")
-    finally:
-        await exchange.close()
+        logger.error(f"Init error: {e}")
+    logger.info("Bot LIVE. Press Ctrl+C to stop.\n")
+    await asyncio.gather(candle_poller(), price_poller())
 if __name__ == "__main__":
     asyncio.run(main())

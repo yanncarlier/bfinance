@@ -17,7 +17,8 @@ if not API_KEY or not API_SECRET:
 # BACKTEST CONFIGURATION (Backtest-Specific Variables)
 # =============================================================================
 BACKTEST_CONFIG = {
-    'candle_timeframe': '1h',      # Candle timeframe
+    # Candle timeframe (default; overridden in loop)
+    'candle_timeframe': '1h',
     'symbol': 'BTC/USDT',          # Trading pair
     'init_usdt': 10000.0,          # Initial USDT balance for backtesting
     'data_limit': 5000,            # ~3.5 days of 1m data; increase for longer periods
@@ -273,14 +274,19 @@ def print_colored_table(df):
 
 
 def main():
-    print("\nRunning spot-optimized backtest (with fees/slippage)...")
-    # Set True to test ADX-filtered version
-    bt = run_hf_backtest(use_adx_filter=False)
-    if not bt.empty:
-        print_colored_table(bt.head(BACKTEST_CONFIG['top_combos_to_display']))
-        ret_colored = color_pct(bt.iloc[0]['return_%'])
-        print(
-            f"\nTop combo: {bt.iloc[0]['short']}/{bt.iloc[0]['long']} → {ret_colored}% (net of fees/slippage)")
+    timeframes = ['1m', '3m', '5m', '15m', '30m', '1h', '2h',
+                  '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M']
+    print("\nRunning spot-optimized backtest (with fees/slippage) across all timeframes...")
+    for timeframe in timeframes:
+        print(f"\n=== Testing timeframe: {timeframe} ===")
+        # Set True to test ADX-filtered version
+        bt = run_hf_backtest(timeframe=timeframe, use_adx_filter=False)
+        if not bt.empty:
+            print_colored_table(
+                bt.head(BACKTEST_CONFIG['top_combos_to_display']))
+            ret_colored = color_pct(bt.iloc[0]['return_%'])
+            print(
+                f"\nTop combo for {timeframe}: {bt.iloc[0]['short']}/{bt.iloc[0]['long']} → {ret_colored}% (net of fees/slippage)")
 
 
 if __name__ == "__main__":
