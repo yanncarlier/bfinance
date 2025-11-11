@@ -7,8 +7,6 @@ from datetime import datetime
 from dotenv import load_dotenv
 import os
 import asyncio
-# Import backtest module for strategy validation (assumes spot long-only compatible)
-import backtest  # Assuming backtest.py is in same dir
 # Load API credentials from .env file
 load_dotenv()
 API_KEY = os.getenv('API_KEY')
@@ -33,17 +31,10 @@ LIVE_CONFIG = {
     'market_type': 'spot',          # Fixed to spot for long-only trading
     'paper_trading': os.getenv('PAPER_TRADING', 'True').lower() == 'true',
     'adx_period': 14,               # ADX period for trend filter
-    'adx_threshold': 25,            # ADX > 25 for strong trend
+    'adx_threshold': 20,            # ADX > 20 for strong trend
     'rsi_period': 14,               # RSI period
     'rsi_overbought': 70,           # Avoid buy if RSI > 70
     'rsi_oversold': 30,             # Additional close if RSI < 30 (optional)
-}
-# =============================================================================
-# BACKTEST CONFIGURATION (Backtest Variables)
-# =============================================================================
-BACKTEST_CONFIG = {
-    'data_limit': 2000,             # ~83 days of 1h data for backtest
-    'top_combos_to_display': 10,    # Number of top MA window combinations to display
 }
 # =============================================================================
 # SHARED/CORE SETUP
@@ -116,15 +107,6 @@ def color_value(val, fmt=":.2f"):
         return f"\033[31m{val:{fmt}}\033[0m"
     else:
         return f"{val:{fmt}}"
-
-
-def print_colored_table(df):
-    """Print backtest results with colored return_% and buy_hold_%."""
-    print(f"{'short':>5} {'long':>5} {'return_%':>10} {'trades':>7} {'winrate_%':>10} {'max_dd_%':>9} {'final_usdt':>11} {'buy_hold_%':>11}")
-    for _, row in df.iterrows():
-        ret_col = color_pct(row['return_%'])
-        bh_col = color_pct(row['buy_hold_%'])
-        print(f"{row['short']:>5} {row['long']:>5} {ret_col:>10} {row['trades']:>7} {row['winrate_%']:>10.1f} {row['max_dd_%']:>9.2f} {row['final_usdt']:>11,.2f} {bh_col:>11}")
 # =============================================================================
 # CORE FUNCTIONS
 # =============================================================================
@@ -325,6 +307,12 @@ async def run_signal_strategy():
     adx_ok = adx > LIVE_CONFIG['adx_threshold']
     rsi_buy_ok = rsi_val < LIVE_CONFIG['rsi_overbought']
     rsi_sell_ok = rsi_val > LIVE_CONFIG['rsi_overbought']
+    logger.info(
+        f"SIGNAL CHECK | EMA{curr_s:.0f}>{curr_l:.0f}? {'YES' if bull_cross else 'no'} | "
+        f"ADX={adx:.1f} (>20?) {'YES' if adx_ok else 'no'} | "
+        f"RSI={rsi_val:.1f} (<70?) {'YES' if rsi_buy_ok else 'no'} | "
+        f"Pos: {position['type']} | Price: ${price:,.0f}"
+    )
     if bull_cross and adx_ok and rsi_buy_ok and position['type'] == 'none':
         usdt = await get_balance()
         if usdt < 10:
@@ -426,24 +414,6 @@ async def main():
         if confirm != "YES":
             logger.info("Confirmation failed - exiting.")
             return
-    print("\nRunning backtest for EMA optimization...")
-    try:
-        bt = backtest.run_hf_backtest(
-            limit=BACKTEST_CONFIG['data_limit'], use_adx_filter=True)
-        if not bt.empty:
-            LIVE_CONFIG['short_window'] = int(bt.iloc[0]['short'])
-            LIVE_CONFIG['long_window'] = int(bt.iloc[0]['long'])
-            logger.info(
-                f"Backtest override: Using EMA {LIVE_CONFIG['short_window']}/{LIVE_CONFIG['long_window']} ({bt.iloc[0]['return_%']:.3f}%)")
-            print_colored_table(
-                bt.head(BACKTEST_CONFIG['top_combos_to_display']))
-            ret_colored = color_pct(bt.iloc[0]['return_%'])
-            print(
-                f"\nTop combo: {bt.iloc[0]['short']}/{bt.iloc[0]['long']} → {ret_colored}% return")
-        else:
-            logger.warning("Backtest empty; using defaults")
-    except Exception as e:
-        logger.error(f"Backtest failed: {e}")
     real_bal = await get_real_balances()
     logger.info(
         f"Initial Balances - {LIVE_CONFIG['quote_currency']}: {real_bal['usdt']:,.2f} | {LIVE_CONFIG['base_currency']}: {real_bal['btc']:.6f}")
