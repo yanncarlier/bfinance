@@ -17,10 +17,14 @@ if not API_KEY or not API_SECRET:
 # LIVE TRADING CONFIGURATION (Trader Variables)
 # =============================================================================
 LIVE_CONFIG = {
-    'candle_timeframe': '1h',
-    'short_window': 12,             # Start with EMA 12 (common for 1h)
-    'long_window': 50,              # EMA 50
-    'position_size_pct': 0.15,      # 15% of available USDT balance per trade
+    # 'candle_timeframe': '1h',
+    # 'short_window': 12,             # Start with EMA 12 (common for 1h)
+    # 'long_window': 50,              # EMA 50
+    'candle_timeframe': '2h',
+    'short_window': 20,
+    'long_window': 95,
+    'adx_threshold': 25,  # Higher for longer TF
+    'position_size_pct': 0.15,      # % of available USDT balance per trade
     'max_trade_usd': 500.0,         # Maximum USD notional per trade
     'take_profit_pct': 0.05,        # Increased to 5% for longer timeframe
     'trailing_stop_pct': 0.03,      # Increased to 3% trail for 1h
@@ -31,10 +35,13 @@ LIVE_CONFIG = {
     'market_type': 'spot',          # Fixed to spot for long-only trading
     'paper_trading': os.getenv('PAPER_TRADING', 'True').lower() == 'true',
     'adx_period': 14,               # ADX period for trend filter
-    'adx_threshold': 20,            # ADX > 20 for strong trend
+    # 'adx_threshold': 20,            # ADX > 20 for strong trend
     'rsi_period': 14,               # RSI period
     'rsi_overbought': 70,           # Avoid buy if RSI > 70
     'rsi_oversold': 30,             # Additional close if RSI < 30 (optional)
+    'candle_poller': 120,           # Poll candles every 120 seconds
+    'volume_ma_period': 20,         # Period for volume moving average
+    'volume_multiplier': 1.2,       # Volume must be > this x MA for confirmation
 }
 # =============================================================================
 # SHARED/CORE SETUP
@@ -289,12 +296,13 @@ async def check_trailing_stop(price):
 async def run_signal_strategy():
     """Execute EMA crossover with ADX/RSI filters."""
     global position, df_candles
-    if len(df_candles) < max(LIVE_CONFIG['long_window'], LIVE_CONFIG['rsi_period'], LIVE_CONFIG['adx_period']):
+    if len(df_candles) < max(LIVE_CONFIG['long_window'], LIVE_CONFIG['rsi_period'], LIVE_CONFIG['adx_period'], LIVE_CONFIG['volume_ma_period']):
         logger.warning(f"Insufficient data: {len(df_candles)} candles")
         return
     close = df_candles['close']
     high = df_candles['high']
     low = df_candles['low']
+    volume = df_candles['volume']
     price = close.iloc[-1]
     short_ema = ema(close, LIVE_CONFIG['short_window'])
     long_ema = ema(close, LIVE_CONFIG['long_window'])
@@ -307,13 +315,17 @@ async def run_signal_strategy():
     adx_ok = adx > LIVE_CONFIG['adx_threshold']
     rsi_buy_ok = rsi_val < LIVE_CONFIG['rsi_overbought']
     rsi_sell_ok = rsi_val > LIVE_CONFIG['rsi_overbought']
+    # Volume filter: Current volume > multiplier x MA(period)
+    vol_ma = volume.rolling(LIVE_CONFIG['volume_ma_period']).mean().iloc[-1]
+    vol_ok = volume.iloc[-1] > vol_ma * LIVE_CONFIG['volume_multiplier']
     logger.info(
         f"SIGNAL CHECK | EMA{curr_s:.0f}>{curr_l:.0f}? {'YES' if bull_cross else 'no'} | "
-        f"ADX={adx:.1f} (>20?) {'YES' if adx_ok else 'no'} | "
+        f"ADX={adx:.1f} (>25?) {'YES' if adx_ok else 'no'} | "
         f"RSI={rsi_val:.1f} (<70?) {'YES' if rsi_buy_ok else 'no'} | "
+        f"Vol>{LIVE_CONFIG['volume_multiplier']}xMA({LIVE_CONFIG['volume_ma_period']})? {'YES' if vol_ok else 'no'} | "
         f"Pos: {position['type']} | Price: ${price:,.0f}"
     )
-    if bull_cross and adx_ok and rsi_buy_ok and position['type'] == 'none':
+    if bull_cross and adx_ok and rsi_buy_ok and vol_ok and position['type'] == 'none':
         usdt = await get_balance()
         if usdt < 10:
             logger.warning("Low USDT balance for entry")
@@ -329,7 +341,7 @@ async def run_signal_strategy():
                 'highest_price': price, 'entry_fee_usd': entry_fee
             })
             logger.info(
-                f"OPEN LONG {amount:.6f} {LIVE_CONFIG['base_currency']} @ ${price:,.2f} | Fee: {entry_fee:.2f} | ADX: {adx:.2f} | RSI: {rsi_val:.2f}")
+                f"OPEN LONG {amount:.6f} {LIVE_CONFIG['base_currency']} @ ${price:,.2f} | Fee: {entry_fee:.2f} | ADX: {adx:.2f} | RSI: {rsi_val:.2f} | Vol: {volume.iloc[-1]:,.0f} (> {vol_ma * LIVE_CONFIG['volume_multiplier']:.0f}?)")
             await log_balance_after_trade()
     elif (bear_cross or rsi_sell_ok) and position['type'] == 'long':
         pos_info = await get_position_info()
@@ -369,7 +381,7 @@ async def candle_poller():
         return
     while True:
         try:
-            await asyncio.sleep(60)
+            await asyncio.sleep(LIVE_CONFIG['candle_poller'])
             new_ohlcv = await exchange.fetch_ohlcv(LIVE_CONFIG['symbol'], timeframe, limit=2)
             if len(new_ohlcv) < 2:
                 continue
@@ -387,7 +399,7 @@ async def candle_poller():
                 await run_signal_strategy()
         except Exception as e:
             logger.error(f"Candle poller error: {e}")
-            await asyncio.sleep(60)
+            await asyncio.sleep(LIVE_CONFIG['candle_poller'])
 
 
 async def price_poller():
@@ -408,7 +420,7 @@ async def price_poller():
 async def main():
     logger.info(
         "SPOT LONG-ONLY EMA CROSSOVER BOT STARTED (with ADX/RSI filters)")
-    logger.info(f"{LIVE_CONFIG['candle_timeframe']} | EMA {LIVE_CONFIG['short_window']}/{LIVE_CONFIG['long_window']} | Risk: {LIVE_CONFIG['position_size_pct']*100}% | Cap: ${LIVE_CONFIG['max_trade_usd']} | TP: {LIVE_CONFIG['take_profit_pct']*100}% | Trail: {LIVE_CONFIG['trailing_stop_pct']*100}% | ADX>{LIVE_CONFIG['adx_threshold']} | RSI<{LIVE_CONFIG['rsi_overbought']}")
+    logger.info(f"{LIVE_CONFIG['candle_timeframe']} | EMA {LIVE_CONFIG['short_window']}/{LIVE_CONFIG['long_window']} | Risk: {LIVE_CONFIG['position_size_pct']*100}% | Cap: ${LIVE_CONFIG['max_trade_usd']} | TP: {LIVE_CONFIG['take_profit_pct']*100}% | Trail: {LIVE_CONFIG['trailing_stop_pct']*100}% | ADX>{LIVE_CONFIG['adx_threshold']} | RSI<{LIVE_CONFIG['rsi_overbought']} | Vol>{LIVE_CONFIG['volume_multiplier']}xMA({LIVE_CONFIG['volume_ma_period']})")
     if not LIVE_CONFIG['paper_trading']:
         confirm = input("\nREAL TRADING! Type 'YES' to continue: ")
         if confirm != "YES":
