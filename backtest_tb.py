@@ -17,10 +17,14 @@ if not API_KEY or not API_SECRET:
 # BACKTEST CONFIGURATION (Backtest-Specific Variables)
 # =============================================================================
 BACKTEST_CONFIG = {
-    'candle_timeframe': '2h',      # Candle timeframe
+    'candle_timeframe': '1h',      # Candle timeframe
     'symbol': 'BTC/USDT',          # Trading pair
     'init_usdt': 10000.0,          # Initial USDT balance for backtesting
-    'data_limit': 5000,            # ~3.5 days of 1m data; increase for longer periods
+    # Start date for backtest period (YYYY-MM-DD)
+    'start_date': '2024-01-01',
+    # 'end_date': '2024-12-31',      # End date for backtest period (YYYY-MM-DD)
+    # End date dynamically set to today (YYYY-MM-DD)
+    'end_date': pd.Timestamp.today().strftime('%Y-%m-%d'),
     'top_combos_to_display': 10,   # Number of top combinations to print
 }
 # =============================================================================
@@ -51,23 +55,39 @@ exchange = ccxt.binance({
 })
 
 
-def fetch_ohlcv(symbol, timeframe, limit):
+def fetch_ohlcv(symbol, timeframe, start_date, end_date):
     """
-    Fetch OHLCV data from Binance.
+    Fetch OHLCV data from Binance for a specific date range.
     Args:
         symbol (str): Trading pair (e.g., 'BTC/USDT')
         timeframe (str): Candle interval (e.g., '5m')
-        limit (int): Number of candles to retrieve
+        start_date (str): Start date (YYYY-MM-DD)
+        end_date (str): End date (YYYY-MM-DD)
     Returns:
         pd.DataFrame: OHLCV data indexed by timestamp, or None on failure
     """
     try:
-        # Use keyword arg for limit to avoid 'since' misinterpretation
-        raw = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+        start_ts = int(pd.to_datetime(start_date).timestamp() * 1000)
+        end_ts = int(pd.to_datetime(end_date).timestamp() * 1000)
+        all_ohlcv = []
+        since = start_ts
+        while since < end_ts:
+            raw = exchange.fetch_ohlcv(
+                symbol, timeframe, since=since, limit=1000)
+            if not raw:
+                break
+            all_ohlcv.extend(raw)
+            since = raw[-1][0] + 1  # Next timestamp after the last candle
+            if since >= end_ts:
+                break
+        if not all_ohlcv:
+            return None
         df = pd.DataFrame(
-            raw, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            all_ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df.set_index('timestamp', inplace=True)
+        # Filter to exact date range
+        df = df[(df.index >= start_date) & (df.index <= end_date)]
         return df
     except Exception as e:
         print(f"Fetch failed: {e}")  # Use print for backtest visibility
@@ -216,7 +236,8 @@ def color_pct(pct):
 
 
 def run_hf_backtest(
-    limit=BACKTEST_CONFIG['data_limit'],
+    start_date=BACKTEST_CONFIG['start_date'],
+    end_date=BACKTEST_CONFIG['end_date'],
     symbol=BACKTEST_CONFIG['symbol'],
     timeframe=BACKTEST_CONFIG['candle_timeframe'],
     short_range=range(5, 21, 3),   # Short MA: 5-20 step 3
@@ -229,10 +250,10 @@ def run_hf_backtest(
     Returns:
         pd.DataFrame: Sorted results by return %
     """
-    df = fetch_ohlcv(symbol, timeframe, limit)
+    df = fetch_ohlcv(symbol, timeframe, start_date, end_date)
     if df is None or len(df) < 90:
         print(
-            f"Failed to fetch {limit} candles; got {len(df) if df is not None else 0}")
+            f"Failed to fetch data for {start_date} to {end_date}; got {len(df) if df is not None else 0} candles")
         return pd.DataFrame()
     print(
         f"Backtesting on {len(df)} {timeframe} candles ({df.index[0]} to {df.index[-1]})")

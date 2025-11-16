@@ -33,9 +33,9 @@ STRATEGY_CONFIG = {
     'position_size_pct': 0.15,
     # Maximum USD to risk per trade (match live)
     'max_trade_usd': 500.0,
-    'take_profit_pct': 0.03,        # Take-profit percentage (match live)
+    'take_profit_pct': 0.05,        # Take-profit percentage (match live)
     # Trailing stop-loss percentage (match live)
-    'trailing_stop_pct': 0.02,
+    'trailing_stop_pct': 0.03,
     'taker_fee_pct': 0.001,         # Binance spot taker fee (0.1%)
     # Simulated slippage (0.05% for market orders)
     'slippage_pct': 0.0005,

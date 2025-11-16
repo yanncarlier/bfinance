@@ -17,10 +17,15 @@ if not API_KEY or not API_SECRET:
 # BACKTEST CONFIGURATION (Backtest-Specific Variables)
 # =============================================================================
 BACKTEST_CONFIG = {
-    'candle_timeframe': '2h',      # Candle timeframe
+    # Candle timeframe (default; overridden in loop)
+    'candle_timeframe': '1h',
     'symbol': 'BTC/USDT',          # Trading pair
     'init_usdt': 10000.0,          # Initial USDT balance for backtesting
-    'data_limit': 5000,            # ~3.5 days of 1m data; increase for longer periods
+    # Start date for backtest period (YYYY-MM-DD)
+    'start_date': '2025-10-01',
+    # 'end_date': '2024-12-31',      # End date for backtest period (YYYY-MM-DD)
+    # End date dynamically set to today (YYYY-MM-DD)
+    'end_date': pd.Timestamp.today().strftime('%Y-%m-%d'),
     'top_combos_to_display': 10,   # Number of top combinations to print
 }
 # =============================================================================
@@ -51,24 +56,45 @@ exchange = ccxt.binance({
 })
 
 
-def fetch_ohlcv(symbol, timeframe, limit):
+def fetch_ohlcv_period(symbol, timeframe, start_date, end_date, limit_per_call=1000):
     """
-    Fetch OHLCV data from Binance.
+    Fetch OHLCV data from Binance for a specific time period.
     Args:
         symbol (str): Trading pair (e.g., 'BTC/USDT')
         timeframe (str): Candle interval (e.g., '5m')
-        limit (int): Number of candles to retrieve
+        start_date (str): Start date (YYYY-MM-DD)
+        end_date (str): End date (YYYY-MM-DD)
+        limit_per_call (int): Candles per API call (default 1000)
     Returns:
-        pd.DataFrame: OHLCV data indexed by timestamp, or None on failure
+        pd.DataFrame: OHLCV data indexed by timestamp within the period, or None on failure
     """
     try:
-        # Use keyword arg for limit to avoid 'since' misinterpretation
-        raw = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
+        since_ts = int(pd.to_datetime(start_date).timestamp() * 1000)
+        until_ts = int(pd.to_datetime(end_date).timestamp() * 1000)
+        all_candles = []
+        current_since = since_ts
+        while current_since < until_ts:
+            raw = exchange.fetch_ohlcv(
+                symbol, timeframe, since=current_since, limit=limit_per_call)
+            if not raw:
+                break
+            all_candles.extend(raw)
+            # Start next fetch after last candle
+            current_since = raw[-1][0] + 1
+            if current_since >= until_ts:
+                break
+        if not all_candles:
+            return None
         df = pd.DataFrame(
-            raw, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            all_candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df.set_index('timestamp', inplace=True)
-        return df
+        # Filter to the exact period (inclusive)
+        df = df[(df.index >= pd.to_datetime(start_date))
+                & (df.index <= pd.to_datetime(end_date))]
+        # Remove duplicates if any (unlikely but safe)
+        df = df[~df.index.duplicated(keep='first')]
+        return df.sort_index()
     except Exception as e:
         print(f"Fetch failed: {e}")  # Use print for backtest visibility
         return None
@@ -216,9 +242,10 @@ def color_pct(pct):
 
 
 def run_hf_backtest(
-    limit=BACKTEST_CONFIG['data_limit'],
     symbol=BACKTEST_CONFIG['symbol'],
     timeframe=BACKTEST_CONFIG['candle_timeframe'],
+    start_date=BACKTEST_CONFIG['start_date'],
+    end_date=BACKTEST_CONFIG['end_date'],
     short_range=range(5, 21, 3),   # Short MA: 5-20 step 3
     long_range=range(25, 101, 10),  # Long MA: 25-100 step 10
     max_workers=12,
@@ -229,10 +256,10 @@ def run_hf_backtest(
     Returns:
         pd.DataFrame: Sorted results by return %
     """
-    df = fetch_ohlcv(symbol, timeframe, limit)
+    df = fetch_ohlcv_period(symbol, timeframe, start_date, end_date)
     if df is None or len(df) < 90:
         print(
-            f"Failed to fetch {limit} candles; got {len(df) if df is not None else 0}")
+            f"Failed to fetch data for {start_date} to {end_date}; got {len(df) if df is not None else 0} candles")
         return pd.DataFrame()
     print(
         f"Backtesting on {len(df)} {timeframe} candles ({df.index[0]} to {df.index[-1]})")
@@ -273,14 +300,21 @@ def print_colored_table(df):
 
 
 def main():
-    print("\nRunning spot-optimized backtest (with fees/slippage)...")
-    # Set True to test ADX-filtered version
-    bt = run_hf_backtest(use_adx_filter=False)
-    if not bt.empty:
-        print_colored_table(bt.head(BACKTEST_CONFIG['top_combos_to_display']))
-        ret_colored = color_pct(bt.iloc[0]['return_%'])
-        print(
-            f"\nTop combo: {bt.iloc[0]['short']}/{bt.iloc[0]['long']} → {ret_colored}% (net of fees/slippage)")
+    timeframes = ['1m', '3m', '5m', '15m', '30m', '1h', '2h',
+                  '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M']
+    period = f"{BACKTEST_CONFIG['start_date']} to {BACKTEST_CONFIG['end_date']}"
+    print(
+        f"\nRunning spot-optimized backtest (with fees/slippage) across all timeframes for period {period}...")
+    for timeframe in timeframes:
+        print(f"\n=== Testing timeframe: {timeframe} ===")
+        # Set True to test ADX-filtered version
+        bt = run_hf_backtest(timeframe=timeframe, use_adx_filter=False)
+        if not bt.empty:
+            print_colored_table(
+                bt.head(BACKTEST_CONFIG['top_combos_to_display']))
+            ret_colored = color_pct(bt.iloc[0]['return_%'])
+            print(
+                f"\nTop combo for {timeframe}: {bt.iloc[0]['short']}/{bt.iloc[0]['long']} → {ret_colored}% (net of fees/slippage)")
 
 
 if __name__ == "__main__":

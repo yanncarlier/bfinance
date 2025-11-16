@@ -44,6 +44,10 @@ LIVE_CONFIG = {
     'candle_poller': 120,           # Poll candles every 120 seconds
     'volume_ma_period': 20,         # Period for volume moving average
     'volume_multiplier': 1.2,       # Volume must be > this x MA for confirmation
+    # Start date for historical data load (YYYY-MM-DD)
+    'start_date': '2024-01-01',
+    # End date dynamically set to today (YYYY-MM-DD)
+    'end_date': pd.Timestamp.today().strftime('%Y-%m-%d'),
 }
 # =============================================================================
 # SHARED/CORE SETUP
@@ -80,7 +84,8 @@ position = {
     'size': 0.0,                    # Positive BTC amount for long
     'entry_price': 0.0,
     'highest_price': 0.0,           # Tracks high for trailing stop
-    'entry_fee_usd': 0.0
+    'entry_fee_usd': 0.0,
+    'entry_slip_usd': 0.0
 }
 # Global data structures
 df_candles = pd.DataFrame()
@@ -116,6 +121,49 @@ def color_value(val, fmt=":.2f"):
 # =============================================================================
 # CORE FUNCTIONS
 # =============================================================================
+
+
+async def fetch_ohlcv_period(symbol, timeframe, start_date, end_date, limit_per_call=1000):
+    """
+    Fetch OHLCV data from Binance for a specific time period (async).
+    Args:
+        symbol (str): Trading pair (e.g., 'BTC/USDT')
+        timeframe (str): Candle interval (e.g., '5m')
+        start_date (str): Start date (YYYY-MM-DD)
+        end_date (str): End date (YYYY-MM-DD)
+        limit_per_call (int): Candles per API call (default 1000)
+    Returns:
+        pd.DataFrame: OHLCV data indexed by timestamp within the period, or empty on failure
+    """
+    try:
+        since_ts = int(pd.to_datetime(start_date).timestamp() * 1000)
+        until_ts = int(pd.to_datetime(end_date).timestamp() * 1000)
+        all_candles = []
+        current_since = since_ts
+        while current_since < until_ts:
+            raw = await exchange.fetch_ohlcv(symbol, timeframe, since=current_since, limit=limit_per_call)
+            if not raw:
+                break
+            all_candles.extend(raw)
+            # Start next fetch after last candle
+            current_since = raw[-1][0] + 1
+            if current_since >= until_ts:
+                break
+        if not all_candles:
+            return pd.DataFrame()
+        df = pd.DataFrame(
+            all_candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        df.set_index('timestamp', inplace=True)
+        # Filter to the exact period (inclusive)
+        df = df[(df.index >= pd.to_datetime(start_date))
+                & (df.index <= pd.to_datetime(end_date))]
+        # Remove duplicates if any (unlikely but safe)
+        df = df[~df.index.duplicated(keep='first')]
+        return df.sort_index()
+    except Exception as e:
+        logger.error(f"Fetch period failed: {e}")
+        return pd.DataFrame()
 
 
 async def get_real_balances():
@@ -180,14 +228,10 @@ def calculate_position_size(usdt_balance, price):
 
 async def place_market_order(side, amount):
     """Place or simulate market order on spot."""
-    global current_price
     if LIVE_CONFIG['paper_trading']:
-        slippage = LIVE_CONFIG['slippage_pct']
-        fill_price = current_price * \
-            (1 + slippage if side == 'buy' else 1 - slippage)
         logger.info(
-            f"[PAPER] {side.upper()} {amount:.6f} {LIVE_CONFIG['base_currency']} @ ${fill_price:,.2f} (slip {slippage*100:.2f}%)")
-        return {'id': f"paper_{int(time.time())}", 'status': 'closed', 'average': fill_price}
+            f"[PAPER] {side.upper()} {amount:.6f} {LIVE_CONFIG['base_currency']} @ mkt")
+        return {'id': f"paper_{int(time.time())}", 'status': 'closed'}
     real_bal = await get_real_balances()
     required_usd = amount * current_price
     fee_usd = required_usd * LIVE_CONFIG['taker_fee_pct']
@@ -206,10 +250,9 @@ async def place_market_order(side, amount):
         logger.info(f"SELL OK: BTC {real_bal['btc']:.6f} >= {amount:.6f}")
     try:
         order = await exchange.create_order(LIVE_CONFIG['symbol'], 'market', side, amount)
-        fill_price = order.get('average', current_price)
         logger.info(
-            f"REAL {side.upper()} {amount:.6f} {LIVE_CONFIG['base_currency']} | ID: {order['id']} | Filled @ ${fill_price:,.2f}")
-        return {'id': order['id'], 'status': order['status'], 'average': fill_price}
+            f"REAL {side.upper()} {amount:.6f} {LIVE_CONFIG['base_currency']} | ID: {order['id']}")
+        return order
     except Exception as e:
         logger.error(f"Order err: {e}")
         return None
@@ -263,36 +306,38 @@ async def check_trailing_stop(price):
         logger.warning(f"TRAIL STOP HIT @ ${price:,.2f}")
         order = await place_market_order('sell', position['size'])
         if order:
-            exit_price = order['average']
             entry_fee = position['entry_fee_usd']
-            exit_fee = calculate_fees('sell', position['size'], exit_price)
-            gross_pnl = (
-                exit_price - position['entry_price']) * position['size']
-            pnl = gross_pnl - entry_fee - exit_fee
+            entry_slip = position['entry_slip_usd']
+            exit_fee = calculate_fees('sell', position['size'], price)
+            exit_slip = position['size'] * price * LIVE_CONFIG['slippage_pct']
+            gross_pnl = position['size'] * (price - position['entry_price'])
+            net_pnl = gross_pnl - entry_fee - entry_slip - exit_fee - exit_slip
             gross_col = color_value(gross_pnl, "+:.2f")
-            pnl_col = color_value(pnl, "+:.2f")
+            pnl_col = color_value(net_pnl, "+:.2f")
+            total_cost = entry_fee + entry_slip + exit_fee + exit_slip
             logger.info(
-                f"LONG CLOSE (TRAIL) @ ${exit_price:,.2f} | Gross: {gross_col} | Fees: {entry_fee + exit_fee:.2f} | Net: {pnl_col} {LIVE_CONFIG['quote_currency']}")
+                f"LONG CLOSE (TRAIL) | Gross: {gross_col} | Costs: {total_cost:.2f} (Fees:{entry_fee + exit_fee:.2f}, Slip:{entry_slip + exit_slip:.2f}) | Net: {pnl_col} {LIVE_CONFIG['quote_currency']}")
             position = {'type': 'none', 'size': 0.0, 'entry_price': 0.0,
-                        'highest_price': 0.0, 'entry_fee_usd': 0.0}
+                        'highest_price': 0.0, 'entry_fee_usd': 0.0, 'entry_slip_usd': 0.0}
             await log_balance_after_trade()
         return True
     elif price >= tp_price:
         logger.warning(f"TAKE PROFIT HIT @ ${price:,.2f}")
         order = await place_market_order('sell', position['size'])
         if order:
-            exit_price = order['average']
             entry_fee = position['entry_fee_usd']
-            exit_fee = calculate_fees('sell', position['size'], exit_price)
-            gross_pnl = (
-                exit_price - position['entry_price']) * position['size']
-            pnl = gross_pnl - entry_fee - exit_fee
+            entry_slip = position['entry_slip_usd']
+            exit_fee = calculate_fees('sell', position['size'], price)
+            exit_slip = position['size'] * price * LIVE_CONFIG['slippage_pct']
+            gross_pnl = position['size'] * (price - position['entry_price'])
+            net_pnl = gross_pnl - entry_fee - entry_slip - exit_fee - exit_slip
             gross_col = color_value(gross_pnl, "+:.2f")
-            pnl_col = color_value(pnl, "+:.2f")
+            pnl_col = color_value(net_pnl, "+:.2f")
+            total_cost = entry_fee + entry_slip + exit_fee + exit_slip
             logger.info(
-                f"LONG CLOSE (TP) @ ${exit_price:,.2f} | Gross: {gross_col} | Fees: {entry_fee + exit_fee:.2f} | Net: {pnl_col} {LIVE_CONFIG['quote_currency']}")
+                f"LONG CLOSE (TP) | Gross: {gross_col} | Costs: {total_cost:.2f} (Fees:{entry_fee + exit_fee:.2f}, Slip:{entry_slip + exit_slip:.2f}) | Net: {pnl_col} {LIVE_CONFIG['quote_currency']}")
             position = {'type': 'none', 'size': 0.0, 'entry_price': 0.0,
-                        'highest_price': 0.0, 'entry_fee_usd': 0.0}
+                        'highest_price': 0.0, 'entry_fee_usd': 0.0, 'entry_slip_usd': 0.0}
             await log_balance_after_trade()
         return True
     return False
@@ -336,14 +381,14 @@ async def run_signal_strategy():
             return
         order = await place_market_order('buy', amount)
         if order:
-            entry_price = order['average']
-            entry_fee = calculate_fees('buy', amount, entry_price)
+            entry_fee = calculate_fees('buy', amount, price)
+            entry_slip = amount * price * LIVE_CONFIG['slippage_pct']
             position.update({
-                'type': 'long', 'size': amount, 'entry_price': entry_price,
-                'highest_price': entry_price, 'entry_fee_usd': entry_fee
+                'type': 'long', 'size': amount, 'entry_price': price,
+                'highest_price': price, 'entry_fee_usd': entry_fee, 'entry_slip_usd': entry_slip
             })
             logger.info(
-                f"OPEN LONG {amount:.6f} {LIVE_CONFIG['base_currency']} @ ${entry_price:,.2f} | Fee:{entry_fee:.2f} | ADX:{adx:.2f} | RSI:{rsi_val:.2f} | Vol:{volume.iloc[-1]:,.0f}(>{vol_ma * LIVE_CONFIG['volume_multiplier']:.0f})")
+                f"OPEN LONG {amount:.6f} {LIVE_CONFIG['base_currency']} @ ${price:,.2f} | Fee:{entry_fee:.2f} | Slip:{entry_slip:.2f} | ADX:{adx:.2f} | RSI:{rsi_val:.2f} | Vol:{volume.iloc[-1]:,.0f}(>{vol_ma * LIVE_CONFIG['volume_multiplier']:.0f})")
             await log_balance_after_trade()
     elif (bear_cross or rsi_sell_ok) and position['type'] == 'long':
         pos_info = await get_position_info()
@@ -351,35 +396,36 @@ async def run_signal_strategy():
             position['size'] = pos_info['size']
         order = await place_market_order('sell', position['size'])
         if order:
-            exit_price = order['average']
             entry_fee = position['entry_fee_usd']
-            exit_fee = calculate_fees('sell', position['size'], exit_price)
-            gross_pnl = (
-                exit_price - position['entry_price']) * position['size']
-            pnl = gross_pnl - entry_fee - exit_fee
+            entry_slip = position['entry_slip_usd']
+            exit_fee = calculate_fees('sell', position['size'], price)
+            exit_slip = position['size'] * price * LIVE_CONFIG['slippage_pct']
+            gross_pnl = position['size'] * (price - position['entry_price'])
+            net_pnl = gross_pnl - entry_fee - entry_slip - exit_fee - exit_slip
             gross_col = color_value(gross_pnl, "+:.2f")
-            pnl_col = color_value(pnl, "+:.2f")
+            pnl_col = color_value(net_pnl, "+:.2f")
+            total_cost = entry_fee + entry_slip + exit_fee + exit_slip
             logger.info(
-                f"CLOSE LONG @ ${exit_price:,.2f} | Gross:{gross_col} | Fees:{entry_fee + exit_fee:.2f} | Net:{pnl_col} {LIVE_CONFIG['quote_currency']} | ADX:{adx:.2f} | RSI:{rsi_val:.2f}")
+                f"CLOSE LONG @ ${price:,.2f} | Gross:{gross_col} | Costs:{total_cost:.2f} (Fees:{entry_fee + exit_fee:.2f}, Slip:{entry_slip + exit_slip:.2f}) | Net:{pnl_col} {LIVE_CONFIG['quote_currency']} | ADX:{adx:.2f} | RSI:{rsi_val:.2f}")
             position = {'type': 'none', 'size': 0.0, 'entry_price': 0.0,
-                        'highest_price': 0.0, 'entry_fee_usd': 0.0}
+                        'highest_price': 0.0, 'entry_fee_usd': 0.0, 'entry_slip_usd': 0.0}
             await log_balance_after_trade()
 
 
 async def candle_poller():
     global df_candles, last_candle_ts
     timeframe = LIVE_CONFIG['candle_timeframe']
+    logger.info(
+        f"Loading historical candles from {LIVE_CONFIG['start_date']} to {LIVE_CONFIG['end_date']}")
     logger.info("Candle poller started")
     try:
-        ohlcv = await exchange.fetch_ohlcv(LIVE_CONFIG['symbol'], timeframe, limit=100)
-        df_candles = pd.DataFrame(
-            ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-        df_candles['timestamp'] = pd.to_datetime(
-            df_candles['timestamp'], unit='ms')
-        df_candles.set_index('timestamp', inplace=True)
+        df_candles = await fetch_ohlcv_period(LIVE_CONFIG['symbol'], timeframe, LIVE_CONFIG['start_date'], LIVE_CONFIG['end_date'])
+        if df_candles.empty:
+            logger.error("Failed to load historical candles")
+            return
         last_candle_ts = int(df_candles.index[-1].timestamp())
         logger.info(
-            f"Loaded {len(df_candles)} candles to {df_candles.index[-1]}")
+            f"Loaded {len(df_candles)} candles from {df_candles.index[0]} to {df_candles.index[-1]}")
     except Exception as e:
         logger.error(f"Init candles err: {e}")
         return
@@ -440,7 +486,7 @@ async def main():
         if pos_info['size'] > 0.0001:
             position.update({
                 'type': 'long', 'size': pos_info['size'], 'entry_price': pos_info['entry_price'],
-                'highest_price': current_price, 'entry_fee_usd': 0.0
+                'highest_price': current_price, 'entry_fee_usd': 0.0, 'entry_slip_usd': 0.0
             })
             logger.info(
                 f"Resume LONG: {position['size']:.6f} {LIVE_CONFIG['base_currency']} @ ${current_price:,.2f}")
