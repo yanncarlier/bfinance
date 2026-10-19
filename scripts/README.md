@@ -123,6 +123,15 @@ Tracks the BTC-USD price from Yahoo Finance and prints 24h change. Uses
 uv run scripts/yahoo_price_tracker.py
 ```
 
+## `latency.sh`
+
+Measures round-trip latency to the Binance API (`curl` timing breakdown of
+`/api/v3/ping`). No env config.
+
+```bash
+bash scripts/latency.sh
+```
+
 ## `main.py`
 
 Placeholder entry point that just prints a greeting. Not used by anything.
