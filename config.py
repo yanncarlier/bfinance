@@ -8,11 +8,13 @@ Variable naming:
 
 * Shared / account-level settings use no prefix (for example ``SYMBOL``,
   ``TAKER_FEE_PCT``, ``PAPER_TRADING``).
-* Script-specific settings are prefixed with the script they belong to:
-  ``MA_`` (ma_crossover_bot.py), ``RT_`` (ma_crossover_bot_rt.py),
-  ``RT_TB_`` (ma_crossover_bot_rt_tb.py), ``BT_`` (backtest.py),
-  ``BT_TB_`` (backtest_tb.py), ``BT_CT_`` (backtest_CT_loop.py),
-  ``BT_CT_TB_`` (backtest_CT_loop_tb.py).
+* Settings that are identical across the backtest scripts are shared too
+  (``INIT_USDT``, ``POSITION_SIZE_PCT``, ``MAX_TRADE_USD``,
+  ``TAKE_PROFIT_PCT``, ``TRAILING_STOP_PCT``, ``TOP_COMBOS_TO_DISPLAY``).
+* Everything else is prefixed with the script it belongs to:
+  ``MA_`` (ma_crossover_bot.py), ``RT_`` / ``RT_TB_`` (the real-time bots in
+  ``scripts/``), ``BT_`` (backtest.py), ``BT_TB_`` / ``BT_CT_`` / ``BT_CT_TB_``
+  (the backtest variants in ``scripts/``).
 """
 
 from __future__ import annotations

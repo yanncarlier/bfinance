@@ -14,19 +14,19 @@ API_KEY, API_SECRET = config.get_api_credentials()
 BACKTEST_CONFIG = {
     'candle_timeframe': config.get_str('BT_CANDLE_TIMEFRAME', '2h'),
     'symbol': config.get_str('SYMBOL', 'BTC/USDT'),
-    'init_usdt': config.get_float('BT_INIT_USDT', 10000.0),
+    'init_usdt': config.get_float('INIT_USDT', 10000.0),
     'data_limit': config.get_int('BT_DATA_LIMIT', 5000),
-    'top_combos_to_display': config.get_int('BT_TOP_COMBOS_TO_DISPLAY', 10),
+    'top_combos_to_display': config.get_int('TOP_COMBOS_TO_DISPLAY', 10),
 }
 # =============================================================================
 # STRATEGY CONFIGURATION (Shared with Live Trading; Override as Needed)
 # =============================================================================
 # These are backtest defaults but can be overridden (e.g., from LIVE_CONFIG if imported)
 STRATEGY_CONFIG = {
-    'position_size_pct': config.get_float('BT_POSITION_SIZE_PCT', 0.15),
-    'max_trade_usd': config.get_float('BT_MAX_TRADE_USD', 500.0),
-    'take_profit_pct': config.get_float('BT_TAKE_PROFIT_PCT', 0.05),
-    'trailing_stop_pct': config.get_float('BT_TRAILING_STOP_PCT', 0.03),
+    'position_size_pct': config.get_float('POSITION_SIZE_PCT', 0.15),
+    'max_trade_usd': config.get_float('MAX_TRADE_USD', 500.0),
+    'take_profit_pct': config.get_float('TAKE_PROFIT_PCT', 0.05),
+    'trailing_stop_pct': config.get_float('TRAILING_STOP_PCT', 0.03),
     'taker_fee_pct': config.get_float('TAKER_FEE_PCT', 0.001),
     'slippage_pct': config.get_float('SLIPPAGE_PCT', 0.0005),
 }

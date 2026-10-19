@@ -3,6 +3,10 @@ import pandas as pd
 import numpy as np
 from itertools import product
 from concurrent.futures import ThreadPoolExecutor
+import sys
+from pathlib import Path
+# Allow running directly from scripts/ (config.py lives at the repo root).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import config
 # Load API credentials (from .env via config)
 API_KEY, API_SECRET = config.get_api_credentials()
@@ -13,26 +17,21 @@ API_KEY, API_SECRET = config.get_api_credentials()
 # here are the defaults used when the variable is unset.
 BACKTEST_CONFIG = {
     # Candle timeframe (default; overridden in loop)
-    'candle_timeframe': config.get_str('BT_CT_TB_CANDLE_TIMEFRAME', '1h'),
+    'candle_timeframe': config.get_str('BT_CT_CANDLE_TIMEFRAME', '1h'),
     'symbol': config.get_str('SYMBOL', 'BTC/USDT'),
-    'init_usdt': config.get_float('BT_CT_TB_INIT_USDT', 10000.0),
-    # Start date for backtest period (YYYY-MM-DD)
-    'start_date': config.get_str('BT_CT_TB_START_DATE', '2025-10-01'),
-    # End date defaults to today (YYYY-MM-DD)
-    'end_date': config.get_str(
-        'BT_CT_TB_END_DATE', pd.Timestamp.today().strftime('%Y-%m-%d')),
-    'top_combos_to_display': config.get_int(
-        'BT_CT_TB_TOP_COMBOS_TO_DISPLAY', 10),
+    'init_usdt': config.get_float('INIT_USDT', 10000.0),
+    'data_limit': config.get_int('BT_CT_DATA_LIMIT', 5000),
+    'top_combos_to_display': config.get_int('TOP_COMBOS_TO_DISPLAY', 10),
 }
 # =============================================================================
 # STRATEGY CONFIGURATION (Shared with Live Trading; Override as Needed)
 # =============================================================================
 # These are backtest defaults but can be overridden (e.g., from LIVE_CONFIG if imported)
 STRATEGY_CONFIG = {
-    'position_size_pct': config.get_float('BT_CT_TB_POSITION_SIZE_PCT', 0.15),
-    'max_trade_usd': config.get_float('BT_CT_TB_MAX_TRADE_USD', 500.0),
-    'take_profit_pct': config.get_float('BT_CT_TB_TAKE_PROFIT_PCT', 0.05),
-    'trailing_stop_pct': config.get_float('BT_CT_TB_TRAILING_STOP_PCT', 0.03),
+    'position_size_pct': config.get_float('POSITION_SIZE_PCT', 0.15),
+    'max_trade_usd': config.get_float('MAX_TRADE_USD', 500.0),
+    'take_profit_pct': config.get_float('TAKE_PROFIT_PCT', 0.05),
+    'trailing_stop_pct': config.get_float('TRAILING_STOP_PCT', 0.03),
     'taker_fee_pct': config.get_float('TAKER_FEE_PCT', 0.001),
     'slippage_pct': config.get_float('SLIPPAGE_PCT', 0.0005),
 }
@@ -48,45 +47,24 @@ exchange = ccxt.binance({
 })
 
 
-def fetch_ohlcv_period(symbol, timeframe, start_date, end_date, limit_per_call=1000):
+def fetch_ohlcv(symbol, timeframe, limit):
     """
-    Fetch OHLCV data from Binance for a specific time period.
+    Fetch OHLCV data from Binance.
     Args:
         symbol (str): Trading pair (e.g., 'BTC/USDT')
         timeframe (str): Candle interval (e.g., '5m')
-        start_date (str): Start date (YYYY-MM-DD)
-        end_date (str): End date (YYYY-MM-DD)
-        limit_per_call (int): Candles per API call (default 1000)
+        limit (int): Number of candles to retrieve
     Returns:
-        pd.DataFrame: OHLCV data indexed by timestamp within the period, or None on failure
+        pd.DataFrame: OHLCV data indexed by timestamp, or None on failure
     """
     try:
-        since_ts = int(pd.to_datetime(start_date).timestamp() * 1000)
-        until_ts = int(pd.to_datetime(end_date).timestamp() * 1000)
-        all_candles = []
-        current_since = since_ts
-        while current_since < until_ts:
-            raw = exchange.fetch_ohlcv(
-                symbol, timeframe, since=current_since, limit=limit_per_call)
-            if not raw:
-                break
-            all_candles.extend(raw)
-            # Start next fetch after last candle
-            current_since = raw[-1][0] + 1
-            if current_since >= until_ts:
-                break
-        if not all_candles:
-            return None
+        # Use keyword arg for limit to avoid 'since' misinterpretation
+        raw = exchange.fetch_ohlcv(symbol, timeframe, limit=limit)
         df = pd.DataFrame(
-            all_candles, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+            raw, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         df.set_index('timestamp', inplace=True)
-        # Filter to the exact period (inclusive)
-        df = df[(df.index >= pd.to_datetime(start_date))
-                & (df.index <= pd.to_datetime(end_date))]
-        # Remove duplicates if any (unlikely but safe)
-        df = df[~df.index.duplicated(keep='first')]
-        return df.sort_index()
+        return df
     except Exception as e:
         print(f"Fetch failed: {e}")  # Use print for backtest visibility
         return None
@@ -234,10 +212,9 @@ def color_pct(pct):
 
 
 def run_hf_backtest(
+    limit=BACKTEST_CONFIG['data_limit'],
     symbol=BACKTEST_CONFIG['symbol'],
     timeframe=BACKTEST_CONFIG['candle_timeframe'],
-    start_date=BACKTEST_CONFIG['start_date'],
-    end_date=BACKTEST_CONFIG['end_date'],
     short_range=range(5, 21, 3),   # Short MA: 5-20 step 3
     long_range=range(25, 101, 10),  # Long MA: 25-100 step 10
     max_workers=12,
@@ -248,10 +225,10 @@ def run_hf_backtest(
     Returns:
         pd.DataFrame: Sorted results by return %
     """
-    df = fetch_ohlcv_period(symbol, timeframe, start_date, end_date)
+    df = fetch_ohlcv(symbol, timeframe, limit)
     if df is None or len(df) < 90:
         print(
-            f"Failed to fetch data for {start_date} to {end_date}; got {len(df) if df is not None else 0} candles")
+            f"Failed to fetch {limit} candles; got {len(df) if df is not None else 0}")
         return pd.DataFrame()
     print(
         f"Backtesting on {len(df)} {timeframe} candles ({df.index[0]} to {df.index[-1]})")
@@ -294,9 +271,7 @@ def print_colored_table(df):
 def main():
     timeframes = ['1m', '3m', '5m', '15m', '30m', '1h', '2h',
                   '4h', '6h', '8h', '12h', '1d', '3d', '1w', '1M']
-    period = f"{BACKTEST_CONFIG['start_date']} to {BACKTEST_CONFIG['end_date']}"
-    print(
-        f"\nRunning spot-optimized backtest (with fees/slippage) across all timeframes for period {period}...")
+    print("\nRunning spot-optimized backtest (with fees/slippage) across all timeframes...")
     for timeframe in timeframes:
         print(f"\n=== Testing timeframe: {timeframe} ===")
         # Set True to test ADX-filtered version

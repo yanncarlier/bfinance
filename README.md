@@ -33,11 +33,7 @@ This is experimental beta software and may contain bugs or exhibit unexpected be
 ```bash
 git clone git@github.com:yanncarlier/bfinance.git
 cd bfinance/
-uv run main.py
-source .venv/bin/activate
-uv pip install -r requirements.txt --reinstall
-uv pip freeze > requirements.txt
-uv run ma_crossover_bot.py
+uv run ma_crossover_bot.py  # optional tools: see scripts/README.md
 ```
 
 Quick start with uv:
@@ -52,12 +48,20 @@ Quick start with uv:
 
 All parameters are read from environment variables by `config.py`. The values
 that used to be hardcoded are kept as defaults, so behaviour is unchanged if
-`.env` is left empty.
+`.env` is left empty. `.env.example` documents the variables the main bot uses.
 
 - Secrets (`API_KEY`, `API_SECRET`) live only in `.env`, which is git-ignored.
 - Shared settings have no prefix: `SYMBOL`, `TAKER_FEE_PCT`, `SLIPPAGE_PCT`,
-  `PAPER_TRADING`, `BALANCE_CACHE_REFRESH_SEC`, ...
-- Script-specific settings are prefixed by script: `MA_` (`ma_crossover_bot.py`),
-  `RT_` / `RT_TB_` (real-time bots), and `BT_` / `BT_TB_` / `BT_CT_` / `BT_CT_TB_`
-  (backtest scripts). See `.env.example` for the full list.
+  `PAPER_TRADING`, `BALANCE_CACHE_REFRESH_SEC`, plus the shared backtest keys
+  (`INIT_USDT`, `POSITION_SIZE_PCT`, `MAX_TRADE_USD`, `TAKE_PROFIT_PCT`,
+  `TRAILING_STOP_PCT`, `TOP_COMBOS_TO_DISPLAY`).
+- Bot settings are prefixed `MA_` (see `.env.example`).
+
+## Project layout
+
+- `ma_crossover_bot.py` — the main bot.
+- `backtest.py` — backtesting framework (run at startup by the bot).
+- `config.py` — environment-variable loader.
+- `scripts/` — optional standalone tools and experiments, documented in
+  `scripts/README.md`. Not needed to run the bot.
 
