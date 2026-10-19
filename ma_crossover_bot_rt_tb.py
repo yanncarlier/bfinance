@@ -4,50 +4,43 @@ import time
 import logging
 import numpy as np
 from datetime import datetime
-from dotenv import load_dotenv
-import os
 import asyncio
-# Load API credentials from .env file
-load_dotenv()
-API_KEY = os.getenv('API_KEY')
-API_SECRET = os.getenv('API_SECRET')
-if not API_KEY or not API_SECRET:
-    raise EnvironmentError("API_KEY and API_SECRET must be in .env file")
+import config
+# Load API credentials (from .env via config)
+API_KEY, API_SECRET = config.get_api_credentials()
 # =============================================================================
 # LIVE TRADING CONFIGURATION (Trader Variables)
 # =============================================================================
+# All values are read from the environment (see .env.example); the literals
+# here are the defaults used when the variable is unset.
 LIVE_CONFIG = {
-    # 'candle_timeframe': '1h',
-    # 'short_window': 12,             # Start with EMA 12 (common for 1h)
-    # 'long_window': 50,              # EMA 50
-    'candle_timeframe': '2h',
-    'short_window': 20,
-    'long_window': 95,
-    'adx_threshold': 25,  # Higher for longer TF
-    'position_size_pct': 0.15,      # % of available USDT balance per trade
-    'max_trade_usd': 500.0,         # Maximum USD notional per trade
-    'take_profit_pct': 0.05,        # Increased to 5% for longer timeframe
-    'trailing_stop_pct': 0.03,      # Increased to 3% trail for 1h
-    'symbol': 'BTC/USDT',           # Trading pair for spot market
-    'base_currency': 'BTC',
-    'quote_currency': 'USDT',
-    'taker_fee_pct': 0.001,         # 0.1% taker fee (adjust for your tier)
-    # Simulated slippage (0.05% for market orders)
-    'slippage_pct': 0.0005,
-    'market_type': 'spot',          # Fixed to spot for long-only trading
-    'paper_trading': os.getenv('PAPER_TRADING', 'True').lower() == 'true',
-    'adx_period': 14,               # ADX period for trend filter
-    # 'adx_threshold': 20,            # ADX > 20 for strong trend
-    'rsi_period': 14,               # RSI period
-    'rsi_overbought': 70,           # Avoid buy if RSI > 70
-    'rsi_oversold': 30,             # Additional close if RSI < 30 (optional)
-    'candle_poller': 120,           # Poll candles every 120 seconds
-    'volume_ma_period': 20,         # Period for volume moving average
-    'volume_multiplier': 1.2,       # Volume must be > this x MA for confirmation
+    'candle_timeframe': config.get_str('RT_TB_CANDLE_TIMEFRAME', '2h'),
+    'short_window': config.get_int('RT_TB_SHORT_WINDOW', 20),
+    'long_window': config.get_int('RT_TB_LONG_WINDOW', 95),
+    'adx_threshold': config.get_int('RT_TB_ADX_THRESHOLD', 25),
+    'position_size_pct': config.get_float('RT_TB_POSITION_SIZE_PCT', 0.15),
+    'max_trade_usd': config.get_float('RT_TB_MAX_TRADE_USD', 500.0),
+    'take_profit_pct': config.get_float('RT_TB_TAKE_PROFIT_PCT', 0.05),
+    'trailing_stop_pct': config.get_float('RT_TB_TRAILING_STOP_PCT', 0.03),
+    'symbol': config.get_str('SYMBOL', 'BTC/USDT'),
+    'base_currency': config.get_str('BASE_CURRENCY', 'BTC'),
+    'quote_currency': config.get_str('QUOTE_CURRENCY', 'USDT'),
+    'taker_fee_pct': config.get_float('TAKER_FEE_PCT', 0.001),
+    'slippage_pct': config.get_float('SLIPPAGE_PCT', 0.0005),
+    'market_type': config.get_str('MARKET_TYPE', 'spot'),
+    'paper_trading': config.get_bool('PAPER_TRADING', True),
+    'adx_period': config.get_int('RT_TB_ADX_PERIOD', 14),
+    'rsi_period': config.get_int('RT_TB_RSI_PERIOD', 14),
+    'rsi_overbought': config.get_int('RT_TB_RSI_OVERBOUGHT', 70),
+    'rsi_oversold': config.get_int('RT_TB_RSI_OVERSOLD', 30),
+    'candle_poller': config.get_int('RT_TB_CANDLE_POLLER', 120),
+    'volume_ma_period': config.get_int('RT_TB_VOLUME_MA_PERIOD', 20),
+    'volume_multiplier': config.get_float('RT_TB_VOLUME_MULTIPLIER', 1.2),
     # Start date for historical data load (YYYY-MM-DD)
-    'start_date': '2024-01-01',
-    # End date dynamically set to today (YYYY-MM-DD)
-    'end_date': pd.Timestamp.today().strftime('%Y-%m-%d'),
+    'start_date': config.get_str('RT_TB_START_DATE', '2024-01-01'),
+    # End date defaults to today (YYYY-MM-DD)
+    'end_date': config.get_str(
+        'RT_TB_END_DATE', datetime.today().strftime('%Y-%m-%d')),
 }
 # =============================================================================
 # SHARED/CORE SETUP
@@ -94,7 +87,8 @@ last_candle_ts = 0
 # Cache for balance fetches to reduce API calls
 last_balance_fetch = 0
 cached_bal = {'usdt': 0.0, 'btc': 0.0}
-BALANCE_CACHE_REFRESH_SEC = 30  # Refresh every 30 seconds
+BALANCE_CACHE_REFRESH_SEC = config.get_int(
+    'BALANCE_CACHE_REFRESH_SEC', 30)  # Balance cache TTL (seconds)
 # =============================================================================
 # COLOR HELPER FUNCTIONS
 # =============================================================================

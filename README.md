@@ -45,6 +45,19 @@ Quick start with uv:
 1. Clone repository: `git clone <repo-url>`
 2. Install uv: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 3. Install dependencies: `uv sync`
-4. Create a `.env` file with your API credentials
+4. Copy the config template and add your credentials: `cp .env.example .env`
 5. Run in paper mode first: `PAPER_TRADING=true uv run ma_crossover_bot.py`
+
+## Configuration
+
+All parameters are read from environment variables by `config.py`. The values
+that used to be hardcoded are kept as defaults, so behaviour is unchanged if
+`.env` is left empty.
+
+- Secrets (`API_KEY`, `API_SECRET`) live only in `.env`, which is git-ignored.
+- Shared settings have no prefix: `SYMBOL`, `TAKER_FEE_PCT`, `SLIPPAGE_PCT`,
+  `PAPER_TRADING`, `BALANCE_CACHE_REFRESH_SEC`, ...
+- Script-specific settings are prefixed by script: `MA_` (`ma_crossover_bot.py`),
+  `RT_` / `RT_TB_` (real-time bots), and `BT_` / `BT_TB_` / `BT_CT_` / `BT_CT_TB_`
+  (backtest scripts). See `.env.example` for the full list.
 

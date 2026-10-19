@@ -4,40 +4,38 @@ import time
 import logging
 import numpy as np
 from datetime import datetime
-from dotenv import load_dotenv
-import os
 # Import backtest module for strategy validation
 import backtest  # Assuming backtest.py is in same dir
-# Load API credentials from .env file
-load_dotenv()
-API_KEY = os.getenv('API_KEY')
-API_SECRET = os.getenv('API_SECRET')
-if not API_KEY or not API_SECRET:
-    raise EnvironmentError("API_KEY and API_SECRET must be in .env file")
+import config
+# Load API credentials (from .env via config)
+API_KEY, API_SECRET = config.get_api_credentials()
 # =============================================================================
 # LIVE TRADING CONFIGURATION (Trader Variables)
 # =============================================================================
+# All values are read from the environment (see .env.example); the literals
+# here are the defaults used when the variable is unset.
 LIVE_CONFIG = {
-    'candle_timeframe': '1s',
-    'short_window': 10,             # Will be overridden by backtest if successful
-    'long_window': 50,             # Will be overridden by backtest if successful
-    'position_size_pct': 0.05,     # RECOMMEND: Reduce from 0.2 for safety
-    'max_trade_usd': 1000.0,       # Maximum USD to risk per trade
-    'stop_loss_pct': 0.01,         # Tightened to 0.01 for volatility in 1s timeframe
-    'schedule_minutes': 10/60,      # 10 seconds to reduce API calls and churn
-    'symbol': 'BTC/USDT',          # Trading pair
-    'base_currency': 'BTC',
-    'quote_currency': 'USDT',
-    'taker_fee_pct': 0.001,         # 0.1% default; adjust for your tier
-    'paper_trading': os.getenv('PAPER_TRADING', 'True').lower() == 'true',
+    'candle_timeframe': config.get_str('MA_CANDLE_TIMEFRAME', '1s'),
+    'short_window': config.get_int('MA_SHORT_WINDOW', 10),   # Overridden by backtest if successful
+    'long_window': config.get_int('MA_LONG_WINDOW', 50),     # Overridden by backtest if successful
+    'position_size_pct': config.get_float('MA_POSITION_SIZE_PCT', 0.05),
+    'max_trade_usd': config.get_float('MA_MAX_TRADE_USD', 1000.0),
+    'stop_loss_pct': config.get_float('MA_STOP_LOSS_PCT', 0.01),
+    'schedule_minutes': config.get_float('MA_SCHEDULE_MINUTES', 10 / 60),
+    'symbol': config.get_str('SYMBOL', 'BTC/USDT'),
+    'base_currency': config.get_str('BASE_CURRENCY', 'BTC'),
+    'quote_currency': config.get_str('QUOTE_CURRENCY', 'USDT'),
+    'taker_fee_pct': config.get_float('TAKER_FEE_PCT', 0.001),
+    'paper_trading': config.get_bool('PAPER_TRADING', True),
 }
 # =============================================================================
 # BACKTEST CONFIGURATION (Backtest Variables)
 # =============================================================================
 # API rate limits (Binance: ~1200 req/min).
 BACKTEST_CONFIG = {
-    'data_limit': 5000,  # 1000 ~17min data 5000 (~1.4hr data)
-    'top_combos_to_display': 10,   # Number of top combinations to print
+    # 1000 ~17min data 5000 (~1.4hr data)
+    'data_limit': config.get_int('MA_DATA_LIMIT', 5000),
+    'top_combos_to_display': config.get_int('MA_TOP_COMBOS_TO_DISPLAY', 10),
 }
 # =============================================================================
 # SHARED/CORE SETUP (Not specific to backtest or live)
@@ -79,7 +77,8 @@ position = {
 # NEW: Cache for balance fetches to reduce API calls
 last_balance_fetch = 0
 cached_bal = {'usdt': 0.0, 'btc': 0.0}
-BALANCE_CACHE_REFRESH_SEC = 30  # Refresh every 30 seconds
+BALANCE_CACHE_REFRESH_SEC = config.get_int(
+    'BALANCE_CACHE_REFRESH_SEC', 30)  # Balance cache TTL (seconds)
 
 
 def get_real_balances():

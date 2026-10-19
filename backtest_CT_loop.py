@@ -1,44 +1,35 @@
 import ccxt
 import pandas as pd
 import numpy as np
-from dotenv import load_dotenv
-import os
 from itertools import product
 from concurrent.futures import ThreadPoolExecutor
-# Load environment variables from .env file
-load_dotenv()
-# Retrieve Binance API key and secret
-API_KEY = os.getenv('API_KEY')
-API_SECRET = os.getenv('API_SECRET')
-# Ensure credentials are available
-if not API_KEY or not API_SECRET:
-    raise EnvironmentError("API_KEY and API_SECRET must be in .env file")
+import config
+# Load API credentials (from .env via config)
+API_KEY, API_SECRET = config.get_api_credentials()
 # =============================================================================
 # BACKTEST CONFIGURATION (Backtest-Specific Variables)
 # =============================================================================
+# All values are read from the environment (see .env.example); the literals
+# here are the defaults used when the variable is unset.
 BACKTEST_CONFIG = {
     # Candle timeframe (default; overridden in loop)
-    'candle_timeframe': '1h',
-    'symbol': 'BTC/USDT',          # Trading pair
-    'init_usdt': 10000.0,          # Initial USDT balance for backtesting
-    'data_limit': 5000,            # ~3.5 days of 1m data; increase for longer periods
-    'top_combos_to_display': 10,   # Number of top combinations to print
+    'candle_timeframe': config.get_str('BT_CT_CANDLE_TIMEFRAME', '1h'),
+    'symbol': config.get_str('SYMBOL', 'BTC/USDT'),
+    'init_usdt': config.get_float('BT_CT_INIT_USDT', 10000.0),
+    'data_limit': config.get_int('BT_CT_DATA_LIMIT', 5000),
+    'top_combos_to_display': config.get_int('BT_CT_TOP_COMBOS_TO_DISPLAY', 10),
 }
 # =============================================================================
 # STRATEGY CONFIGURATION (Shared with Live Trading; Override as Needed)
 # =============================================================================
 # These are backtest defaults but can be overridden (e.g., from LIVE_CONFIG if imported)
 STRATEGY_CONFIG = {
-    # Risk percentage of balance per trade (match live)
-    'position_size_pct': 0.15,
-    # Maximum USD to risk per trade (match live)
-    'max_trade_usd': 500.0,
-    'take_profit_pct': 0.05,        # Take-profit percentage (match live)
-    # Trailing stop-loss percentage (match live)
-    'trailing_stop_pct': 0.03,
-    'taker_fee_pct': 0.001,         # Binance spot taker fee (0.1%)
-    # Simulated slippage (0.05% for market orders)
-    'slippage_pct': 0.0005,
+    'position_size_pct': config.get_float('BT_CT_POSITION_SIZE_PCT', 0.15),
+    'max_trade_usd': config.get_float('BT_CT_MAX_TRADE_USD', 500.0),
+    'take_profit_pct': config.get_float('BT_CT_TAKE_PROFIT_PCT', 0.05),
+    'trailing_stop_pct': config.get_float('BT_CT_TRAILING_STOP_PCT', 0.03),
+    'taker_fee_pct': config.get_float('TAKER_FEE_PCT', 0.001),
+    'slippage_pct': config.get_float('SLIPPAGE_PCT', 0.0005),
 }
 # =============================================================================
 # CORE SETUP (Not specific to backtest)
