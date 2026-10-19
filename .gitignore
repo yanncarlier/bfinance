@@ -652,3 +652,9 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+notes.md
+.env
+__pycache__/
+hf_bot.log
+pycache/
+spot_ma_bot.log
