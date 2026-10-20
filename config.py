@@ -38,6 +38,11 @@ def _raw(name: str) -> str | None:
     return value
 
 
+def is_set(name: str) -> bool:
+    """Return True if env var ``name`` is present and non-blank."""
+    return _raw(name) is not None
+
+
 def get_str(name: str, default: str) -> str:
     """Return env var ``name`` as a string, or ``default`` if unset/blank."""
     value = _raw(name)

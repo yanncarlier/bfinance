@@ -139,3 +139,22 @@ Placeholder entry point that just prints a greeting. Not used by anything.
 ```bash
 uv run scripts/main.py
 ```
+
+## `paper_run.py`
+
+Runs `ma_crossover_bot.py` against a **simulated** wallet (default 100 USDT),
+because the bot itself reads the real exchange balance and has no paper wallet.
+It patches the bot's balance/order calls and runs the bot's own loop unmodified.
+
+```bash
+PAPER_TRADING=true uv run scripts/paper_run.py --usdt 100 --seconds 3600
+```
+
+## `paper_replay.py`
+
+Replays the bot's strategy over a longer historical window (same simulated
+wallet), so a slow multi-day strategy can be paper-tested in seconds.
+
+```bash
+PAPER_TRADING=true uv run scripts/paper_replay.py --since 2024-06-17
+```

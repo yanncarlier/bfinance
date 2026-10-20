@@ -2,7 +2,6 @@ import ccxt
 import pandas as pd
 import time
 import logging
-import numpy as np
 from datetime import datetime
 # Import backtest module for strategy validation
 import backtest  # Assuming backtest.py is in same dir
@@ -28,6 +27,10 @@ LIVE_CONFIG = {
     'taker_fee_pct': config.get_float('TAKER_FEE_PCT', 0.001),
     'paper_trading': config.get_bool('PAPER_TRADING', True),
 }
+# If the MA windows are set explicitly in the environment, trust them and do not
+# let the startup backtest override them: it optimises on a different timeframe
+# and can only see ~1000 bars, so its pick is easily overfit to recent noise.
+WINDOWS_PINNED = config.is_set('MA_SHORT_WINDOW') and config.is_set('MA_LONG_WINDOW')
 # =============================================================================
 # BACKTEST CONFIGURATION (Backtest Variables)
 # =============================================================================
@@ -291,7 +294,7 @@ def main():
     try:
         # Unpack config as kwargs to match run_hf_backtest signature
         bt = backtest.run_hf_backtest(limit=BACKTEST_CONFIG['data_limit'])
-        if not bt.empty:
+        if not bt.empty and not WINDOWS_PINNED:
             LIVE_CONFIG['short_window'] = int(
                 bt.iloc[0]['short'])  # FIX: Cast to int
             LIVE_CONFIG['long_window'] = int(
@@ -302,6 +305,11 @@ def main():
                 index=False))
             print(
                 f"\nTop combo: {bt.iloc[0]['short']}/{bt.iloc[0]['long']} → {bt.iloc[0]['return_%']}%")
+        elif WINDOWS_PINNED:
+            logger.info(
+                f"MA windows pinned via env: keeping "
+                f"{LIVE_CONFIG['short_window']}/{LIVE_CONFIG['long_window']} "
+                f"(backtest override skipped)")
         else:
             logger.warning(
                 "Backtest returned empty results; using LIVE_CONFIG defaults")
